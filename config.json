@@ -9,6 +9,7 @@
   "homing_switches": false,
   "travel_feed": 4000,
   "drag_feed": 2000,
+  "slow_feed": 1500,
   "board": {
     "a1": [
       31,

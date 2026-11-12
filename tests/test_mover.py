@@ -168,3 +168,14 @@ def test_every_slot_is_reachable_on_the_real_layout():
             for square in [(0, 0), (7, 7), (3, 3)]:
                 mover.check(Step(square, slot, leaves_board=True))
                 mover.check(Step(slot, square, leaves_board=True))
+
+
+def test_at_speed_applies_to_travel_and_drag_until_restored():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    machine.head = None
+    mover = make_mover(machine)
+    restore = mover.at_speed(1500)
+    mover.run(Step((4, 1), (4, 3)))
+    restore()
+    assert [l.split()[-1] for l in machine.lines if l.startswith("G53")] == ["F1500", "F1500"]
+    assert (mover.travel_feed, mover.drag_feed) == (3000, 1500)

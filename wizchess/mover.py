@@ -132,6 +132,16 @@ class Mover:
         self.drag_feed = drag_feed
         self.grab_seconds = grab_seconds
 
+    def at_speed(self, feed):
+        """Run the next moves at one speed for both travel and drag; call the result to restore."""
+        saved = (self.travel_feed, self.drag_feed)
+        self.travel_feed = self.drag_feed = feed
+
+        def restore():
+            self.travel_feed, self.drag_feed = saved
+
+        return restore
+
     def head_grid(self):
         head = self.machine.head
         return None if head is None else self.geometry.to_grid(head)

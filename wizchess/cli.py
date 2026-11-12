@@ -243,16 +243,23 @@ def cmd_grid(cfg, machine, args):
                 )
                 if rules:
                     notes.extend("Note: %s." % p for p in game.problems())
-            elif kind == "goto":
-                game.mover.goto(parse_square(command[1]))
-                machine.wait_until_idle()
-            elif kind == "move":
-                _, start, end, promotion = command
-                if rules:
-                    notes = game.play_move(game.move_between(start, end, promotion))
-                else:
-                    notes = game.free_move(start, end)
-                came_from = start
+            elif kind in ("goto", "move"):
+                slow = command[-1]
+                restore = game.mover.at_speed(cfg.get("slow_feed", 1500)) if slow else None
+                try:
+                    if kind == "goto":
+                        game.mover.goto(parse_square(command[1]))
+                        machine.wait_until_idle()
+                    else:
+                        _, start, end, promotion, _ = command
+                        if rules:
+                            notes = game.play_move(game.move_between(start, end, promotion))
+                        else:
+                            notes = game.free_move(start, end)
+                        came_from = start
+                finally:
+                    if restore:
+                        restore()
             if kind in ("clear", "put", "remove", "turn"):
                 notes.extend("Note: %s." % p for p in game.problems())
         except (ValueError, MachineError) as e:

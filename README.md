@@ -59,6 +59,12 @@ Once homing switches are installed, set `$22=1` on the engraver and
 - After a reply goes missing, the connection is no longer trusted and every command
   says to restart the tool.
 
+## Slow moves
+
+Add `slow` to a grid move or head move (`B1 C3 slow`, `A4 slow`) to run that one move at
+`slow_feed` from `config.json`: 1500 mm/min, which is 25 mm/s, for both the head's travel
+and the drag.
+
 ## Moving without rules
 
 `rules off` in the grid lets any piece go to any square (`A1 A8`), for testing and for

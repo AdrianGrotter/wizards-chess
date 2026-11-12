@@ -5,16 +5,16 @@ from wizchess.grid import parse_command, render
 
 @pytest.mark.parametrize("text", ["A4 -> C2", "a4->c2", "A4 C2", "a4c2", "a4-c2", "a4 to c2", "  A4  ->  C2 "])
 def test_move_spellings(text):
-    assert parse_command(text) == ("move", "a4", "c2", None)
+    assert parse_command(text) == ("move", "a4", "c2", None, False)
 
 
 def test_promotion_choice():
-    assert parse_command("E7 -> E8 N") == ("move", "e7", "e8", "n")
-    assert parse_command("e7e8=q") == ("move", "e7", "e8", "q")
+    assert parse_command("E7 -> E8 N") == ("move", "e7", "e8", "n", False)
+    assert parse_command("e7e8=q") == ("move", "e7", "e8", "q", False)
 
 
 def test_single_square_moves_the_head():
-    assert parse_command("E4") == ("goto", "e4")
+    assert parse_command("E4") == ("goto", "e4", False)
 
 
 def test_put_keeps_the_piece_colour():
@@ -40,7 +40,7 @@ def test_remove_reset_clear():
         ("A4 -> 44", "'44' is not a square."),
         ("A4 A4", "A4 A4 starts and ends on the same square."),
         ("jump", "Unknown command 'jump'."),
-        ("A4 -> C2 fast", "Unexpected 'fast' after the move."),
+        ("A4 -> C2 fast", "Unexpected 'fast' after the move. Only 'slow' or a promotion piece"),
         ("A4 -> C2 k", "Unexpected 'k' after the move."),
         ("put e4 x", "'x' is not a piece."),
         ("put e4", "Use put with a square and a piece"),
@@ -76,3 +76,10 @@ def test_rules_on_off():
     assert parse_command("Rules ON") == ("rules", "on")
     with pytest.raises(ValueError, match="Use rules with on or off"):
         parse_command("rules")
+
+
+def test_slow_moves():
+    assert parse_command("B1 C3 slow") == ("move", "b1", "c3", None, True)
+    assert parse_command("e7 e8 n SLOW") == ("move", "e7", "e8", "n", True)
+    assert parse_command("e7 e8 slow n") == ("move", "e7", "e8", "n", True)
+    assert parse_command("A4 slow") == ("goto", "a4", True)

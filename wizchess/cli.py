@@ -216,7 +216,7 @@ def main(argv=None):
     p.add_argument("--edges", action="store_true", help="travel along the lines between squares")
     sub.add_parser("home", help="run homing ($H), needs homing switches")
     sub.add_parser("play", help="play a game by typing moves")
-    sub.add_parser("grid", help="interactive grid: type A4 -> C2 to drag a piece, no chess rules")
+    sub.add_parser("grid", help="interactive grid: type A4 C2 to move a piece, chess rules enforced")
     sub.add_parser("jog", help="interactive session: move the head, drag pieces, save calibration points")
 
     args = parser.parse_args(argv)

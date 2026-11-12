@@ -36,7 +36,7 @@ def test_remove_reset_clear():
         ("A0", "A0 is not on the board: rows go from 1 to 8."),
         ("e44", "E44 is not on the board: rows go from 1 to 8."),
         ("A4 -> 44", "'44' is not a square."),
-        ("A4 -> A4", "A4 -> A4 starts and ends on the same square."),
+        ("A4 A4", "A4 A4 starts and ends on the same square."),
         ("jump", "Unknown command 'jump'."),
         ("A4 -> C2 fast", "Unexpected 'fast' after the move."),
         ("A4 -> C2 k", "Unexpected 'k' after the move."),

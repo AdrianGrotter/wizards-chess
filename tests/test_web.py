@@ -217,3 +217,27 @@ def test_state_lists_the_legal_moves_of_each_piece():
     assert "e1" not in moves and "e7" not in moves
     play(app, "rules off")
     assert app.state()["moves"] == {}
+
+
+def test_grid_survives_a_restart(tmp_path):
+    path = str(tmp_path / "state.json")
+    first = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), path)
+    threading.Thread(target=first.run, daemon=True).start()
+    for text in ["e2 e4", "d7 d5", "e4 d5", "rules off"]:
+        play(first, text)
+    second = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), path)
+    before, after = first.state(), second.state()
+    assert after["pieces"] == before["pieces"] and after["pieces"]["d5"] == "P"
+    assert after["parked"] == {"white": "", "black": "p"}
+    assert not after["rules"]
+    game = second.session.game
+    assert game.graveyard.parked == first.session.game.graveyard.parked
+    assert "as it was left before the restart" in after["log"][-1]["text"]
+
+
+def test_unreadable_saved_grid_starts_fresh(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text("{not json")
+    app = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), str(path))
+    assert app.state()["pieces"]["e2"] == "P"
+    assert app.state()["log"][-1]["error"]

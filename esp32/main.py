@@ -65,7 +65,7 @@ def play(config, ip):
     if config.get("ap_ssid"):
         ap_ip = open_access_point(config["ap_ssid"], config["ap_password"])
         say("Or join the WiFi network %s and play at http://%s/" % (config["ap_ssid"], ap_ip))
-    web.run(game, machine, 80)
+    web.run(game, machine, 80, state_path="state.json")
 
 
 def main():

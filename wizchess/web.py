@@ -4,6 +4,7 @@ Runs under both Python (on a laptop) and MicroPython (on the ESP32).
 """
 import _thread
 import json
+import os
 import socket
 import time
 
@@ -30,7 +31,8 @@ class App:
     server's thread only hands them over, reads the state and asks for a stop.
     """
 
-    def __init__(self, cfg, machine):
+    def __init__(self, cfg, machine, state_path=None):
+        """state_path names a file that keeps the grid across restarts of this program."""
         mover = Mover(machine, Geometry.from_config(cfg["board"]), cfg["travel_feed"], cfg["drag_feed"])
         graveyard = cfg.get("graveyard")
         game = Game(
@@ -52,6 +54,8 @@ class App:
         self.log_count = 0
         self.status = ""
         self.moves = {}
+        self.state_path = state_path
+        self._load()
         self._refresh()
 
     def say(self, text, error=False):
@@ -122,6 +126,43 @@ class App:
             "question": self.question,
             "log": self.log,
         }
+
+    def _save(self):
+        if self.state_path is None:
+            return
+        game = self.session.game
+        parked = []
+        if game.graveyard is not None:
+            for color in ("white", "black"):
+                parked += [[slot[0], slot[1], piece.symbol()] for slot, piece in game.graveyard.parked[color]]
+        saved = {"fen": game.board.fen(), "parked": parked, "rules": self.session.rules}
+        try:
+            with open(self.state_path + ".new", "w") as f:
+                json.dump(saved, f)
+            os.rename(self.state_path + ".new", self.state_path)
+        except OSError as e:
+            self.say("The grid could not be saved (%s); it will be forgotten at the next restart." % e, error=True)
+
+    def _load(self):
+        if self.state_path is None:
+            return
+        game = self.session.game
+        try:
+            with open(self.state_path) as f:
+                saved = json.load(f)
+            game.board.set_fen(saved["fen"])
+            if game.graveyard is not None:
+                for f, r, symbol in saved["parked"]:
+                    piece = chess.Piece.from_symbol(symbol)
+                    game.graveyard.parked["white" if piece.color else "black"].append(((f, r), piece))
+            self.session.rules = bool(saved["rules"])
+        except OSError:
+            return
+        except (ValueError, KeyError, TypeError):
+            game.reset()
+            self.say("The saved grid could not be read, so the grid starts from the opening position.", error=True)
+            return
+        self.say("The grid is as it was left before the restart. If the pieces were moved since, fix it with put and remove.")
 
     def _refresh(self):
         game = self.session.game
@@ -233,6 +274,7 @@ class App:
             if self.stopping:
                 self._stopped()
             self._refresh()
+            self._save()
 
     def _stopped(self):
         try:
@@ -346,8 +388,8 @@ def serve(app, port, host="0.0.0.0"):
             conn.close()
 
 
-def run(cfg, machine, port, host="0.0.0.0"):
+def run(cfg, machine, port, host="0.0.0.0", state_path=None):
     """Serve the page and play until the program is ended."""
-    app = App(cfg, machine)
+    app = App(cfg, machine, state_path)
     _thread.start_new_thread(serve, (app, port, host))
     app.run()

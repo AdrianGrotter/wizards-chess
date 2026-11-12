@@ -3,7 +3,7 @@ import argparse
 from . import config as config_file
 from .game import Game, Graveyard
 from .geometry import Geometry, parse_square
-from .grid import GRID_HELP, parse_command, render
+from .grid import GRID_HELP, needs_edges, parse_command, render, starting_position
 from .machine import FakeMachine, MachineError
 from .mover import Mover, Step
 
@@ -101,8 +101,9 @@ def cmd_play(cfg, machine, args):
 
 def cmd_grid(cfg, machine, args):
     mover = make_mover(cfg, machine)
-    head = start = end = None
-    print(render())
+    pieces = starting_position()
+    head = came_from = None
+    print(render(pieces))
     print(GRID_HELP)
     while True:
         try:
@@ -117,15 +118,31 @@ def cmd_grid(cfg, machine, args):
             if kind == "help":
                 print(GRID_HELP)
                 continue
-            if kind == "goto":
+            if kind == "reset":
+                pieces, came_from = starting_position(), None
+            elif kind == "clear":
+                pieces, came_from = {}, None
+            elif kind == "put":
+                pieces[command[1]] = command[2]
+            elif kind == "remove":
+                pieces.pop(command[1], None)
+            elif kind == "goto":
                 mover.goto(parse_square(command[1]))
                 machine.wait_until_idle()
                 head = command[1]
             elif kind == "move":
-                _, start, end, via_edges = command
+                _, start, end, force_edges = command
+                if start not in pieces:
+                    print("There is no piece on %s. Use 'put' if the grid is out of date." % start.upper())
+                    continue
+                if end in pieces:
+                    input("Take the %s off %s by hand, then press Enter." % (pieces[end], end.upper()))
+                    del pieces[end]
+                via_edges = force_edges or needs_edges(pieces, start, end)
                 mover.run(Step(parse_square(start), parse_square(end), via_edges))
-                head = end
-            print(render(head, start, end))
+                pieces[end] = pieces.pop(start)
+                head, came_from = end, start
+            print(render(pieces, head, came_from))
         except (ValueError, MachineError) as e:
             print(e)
 

@@ -375,8 +375,9 @@ function react(before, after) {
   let moved = false;
   for (const target of arrived) {
     const free = left.filter(l => !used.has(l.name) && l.name !== target.name);
-    const source = free.find(l => l.piece === target.piece) ||
-                   free.find(l => !l.replaced && isWhite(l.piece) === isWhite(target.piece));
+    const promoted = l => !l.replaced && l.piece.toLowerCase() === "p" && "18".includes(target.name[1]) &&
+                          isWhite(l.piece) === isWhite(target.piece);
+    const source = free.find(l => l.piece === target.piece) || free.find(promoted);
     if (!source) continue;
     used.add(source.name);
     if (!calm) glide(target.piece, source.name, target.name);
@@ -498,6 +499,8 @@ const sound = (() => {
 /* ---------- talking to the board ---------- */
 function notice(text, error) {
   const n = state && state.log.length ? state.log[state.log.length - 1].n : 0;
+  const last = notices[notices.length - 1];
+  if (last && last.text === text && last.n === n + 0.5) return;
   notices.push({n: n + 0.5, text, error});
   notices = notices.slice(-10);
   draw();
@@ -526,6 +529,10 @@ function clicked(name) {
     $("question").scrollIntoView({behavior: "smooth", block: "center"});
     return;
   }
+  if (state.busy || optimistic) {
+    notice("Wait for the board to finish its move.", true);
+    return;
+  }
   if (selected !== null && !state.pieces[selected]) selected = null;
   if (selected === null) {
     if (state.pieces[name]) { selected = name; sound.click(); }
@@ -545,7 +552,8 @@ function clicked(name) {
       previous = state;
     }
     selected = null;
-    command(text).then(ok => { if (!ok) { optimistic = null; refresh(); } });
+    const mine = optimistic;
+    command(text).then(ok => { if (!ok && mine && optimistic === mine) { optimistic = null; refresh(); } });
   }
   draw();
 }

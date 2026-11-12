@@ -47,12 +47,17 @@ class GrblProtocol(GcodeMachine):
     """
 
     restart_hint = "Quit and start the tool again."
+    # How many bytes of commands may be on their way without an 'ok' yet. 0
+    # waits for every 'ok' before sending the next line. A link whose replies
+    # arrive late sets this, kept under the size of the engraver's input buffer.
+    window = 0
     silent_message = "The engraver did not answer."
 
     def __init__(self, travel_mm, magnet_power, homing_switches=False, timeout=10.0):
         super().__init__(travel_mm, magnet_power, homing_switches)
         self.timeout = timeout
         self.out_of_step = False
+        self.unanswered = []
 
     def _write(self, data):
         raise NotImplementedError
@@ -103,26 +108,58 @@ class GrblProtocol(GcodeMachine):
                     "No reply from the engraver to %r. %s" % (waiting_for, self.restart_hint)
                 )
 
+    def _answer(self, text):
+        """Take one line of engraver output as the answer to the oldest unanswered command, if it is one."""
+        if text == "ok":
+            if self.unanswered:
+                self.unanswered.pop(0)
+            return True
+        if text.startswith("error"):
+            line = self.unanswered.pop(0) if self.unanswered else "a command"
+            raise GrblError("The engraver rejected %r (%s)." % (line, text))
+        if text.startswith("ALARM"):
+            self.unanswered = []
+            self._drain(0.5)
+            raise GrblError(alarm_message(text))
+        return False
+
+    def _settle(self, count, timeout):
+        """Wait until at most count commands are still unanswered."""
+        deadline = monotonic() + timeout
+        while len(self.unanswered) > count:
+            self._answer(self._read_line(deadline, self.unanswered[0]))
+
+    def flush(self):
+        """Wait for the 'ok' of every command sent so far."""
+        self._settle(0, MOTION_TIMEOUT)
+
     def send(self, line, timeout=None):
-        """Send one line and return the lines GRBL printed before 'ok'."""
+        """Send one line. Returns the lines GRBL printed before its 'ok'.
+
+        With a window, plain G-code is sent without waiting for its 'ok' and
+        nothing is returned; flush() or wait_until_idle() collects the answers.
+        """
         if self.out_of_step:
             raise GrblError(
                 "The connection to the engraver is out of step after an earlier error. "
                 + self.restart_hint
             )
+        if self.window and not line.startswith("$"):
+            while self.unanswered and sum(len(l) + 1 for l in self.unanswered) + len(line) + 1 > self.window:
+                self._settle(len(self.unanswered) - 1, timeout or MOTION_TIMEOUT)
+            self._write((line + "\n").encode())
+            self.unanswered.append(line)
+            return []
+        self.flush()
         self._write((line + "\n").encode())
+        self.unanswered.append(line)
         deadline = monotonic() + (timeout or self.timeout)
         replies = []
-        while True:
+        while self.unanswered:
             text = self._read_line(deadline, line)
-            if text == "ok":
-                return replies
-            if text.startswith("error"):
-                raise GrblError("The engraver rejected %r (%s)." % (line, text))
-            if text.startswith("ALARM"):
-                self._drain(0.5)
-                raise GrblError(alarm_message(text))
-            replies.append(text)
+            if not self._answer(text):
+                replies.append(text)
+        return replies
 
     def status(self):
         if self.out_of_step:
@@ -133,6 +170,7 @@ class GrblProtocol(GcodeMachine):
             text = self._read_line(deadline, "?")
             if text.startswith("<"):
                 return text
+            self._answer(text)
 
     def position(self):
         """Head position in machine coordinates."""
@@ -150,6 +188,7 @@ class GrblProtocol(GcodeMachine):
     def wait_until_idle(self):
         # G4 only replies once every queued move has finished.
         self.send("G4 P0", timeout=MOTION_TIMEOUT)
+        self.flush()
         deadline = monotonic() + MOTION_TIMEOUT
         while True:
             state = self.status()
@@ -188,7 +227,9 @@ class GrblProtocol(GcodeMachine):
         """
         self.head = None
         self.interrupted = False
+        self.unanswered = []
         try:
+            self._reset_input()
             self._write(b"!")
             at_rest = self._came_to_rest(3.0)
             self._write(b"\x18")

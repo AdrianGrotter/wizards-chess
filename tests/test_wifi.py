@@ -1,5 +1,6 @@
 import socket
 import threading
+import time
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -53,8 +54,9 @@ class FakeEngraver:
             assert query["PAGEID"] == ["3"]
             conn.sendall(b"HTTP/1.0 200 OK\r\n\r\n")
             conn.close()
-            for chunk in self._reply(query["commandText"][0]):
-                self._frame(2, chunk)
+            for line in query["commandText"][0].split("\n"):
+                for chunk in self._reply(line):
+                    self._frame(2, chunk)
 
     def _reply(self, text):
         if text == "?":
@@ -97,10 +99,13 @@ def test_commands_wait_for_ok_and_settings_are_read(engraver):
     machine = connect(engraver)
     machine.move_to(50, 60, 6000)
     machine.magnet(True)
+    machine.flush()
     assert engraver.lines[-2:] == ["G53 G1 X50.00 Y60.00 F6000", "M3 S1000"]
     assert machine.settings() == {"32": "1", "120": "500.000"}
-    with pytest.raises(GrblError, match="rejected"):
+    with pytest.raises(GrblError, match="rejected 'G1 X999'"):
         machine.send("G1 X999")
+        machine.send("G4 P0")
+        machine.flush()
 
 
 def test_stop_holds_then_resets_and_keeps_the_position(engraver):
@@ -117,6 +122,7 @@ def test_interrupt_ends_a_wait_from_another_thread(engraver):
     threading.Timer(0.3, machine.interrupt).start()
     with pytest.raises(GrblError, match="Stopped"):
         machine.send("G4 P100", timeout=20)
+        machine.flush()
 
 
 def test_unreachable_engraver_has_a_clear_message():
@@ -132,7 +138,9 @@ def test_unreachable_engraver_has_a_clear_message():
 def test_idle_answers_the_engravers_pings(engraver):
     machine = connect(engraver)
     engraver._frame(9, b"hello")
-    machine.idle()
+    for _ in range(20):
+        machine.idle()
+        time.sleep(0.01)
     engraver.ws.settimeout(2)
     pong = engraver.ws.recv(64)
     assert pong[0] == 0x8A and len(pong) == 2 + 4 + 5
@@ -153,6 +161,29 @@ def test_a_connection_that_died_quietly_is_reopened_before_use(engraver):
     engraver.ws.connect(("127.0.0.1", 9))
     machine.last_heard -= 60
     machine.send("G4 P0")
+    machine.flush()
     assert engraver.lines[-3:] == ["G21", "G90", "G4 P0"]
     assert machine.head == (12.0, 34.0)
     dead.close()
+
+
+def test_commands_are_sent_without_waiting_but_never_more_than_the_window(engraver):
+    machine = connect(engraver)
+    held = threading.Event()
+    reply = engraver._reply
+
+    def slow(text):
+        if text != "?":
+            held.wait(2)
+        return reply(text)
+
+    engraver._reply = slow
+    lines = ["G53 G1 X%d.00 Y10.00 F6000" % x for x in range(10, 16)]
+    threading.Timer(0.5, held.set).start()
+    for line in lines:
+        machine.send(line)
+        assert sum(len(l) + 1 for l in machine.unanswered) <= machine.window
+    assert len(machine.unanswered) > 1
+    machine.wait_until_idle()
+    assert machine.unanswered == []
+    assert engraver.lines[-7:] == lines + ["G4 P0"]

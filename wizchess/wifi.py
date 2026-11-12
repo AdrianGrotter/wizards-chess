@@ -137,6 +137,10 @@ class WifiMachine(GrblProtocol):
     restart_hint = "Press Reconnect."
     # A connection that has been quiet this long is checked before it is used:
     # the network can drop it without either end being told.
+    # The engraver hands its replies to the network only about twice a second,
+    # so waiting for each 'ok' would add half a second to every command. Its
+    # network input buffer holds 256 bytes.
+    window = 200
     quiet_seconds = 5
     alive_seconds = 3
 
@@ -149,6 +153,7 @@ class WifiMachine(GrblProtocol):
         self.ws_port = ws_port
         self.engraver = None
         self.buffer = b""
+        self.outbox = ""
         self.head = None
         self.last_heard = 0
         self.silent_message = "The engraver at %s is on the network but did not answer." % host
@@ -157,8 +162,10 @@ class WifiMachine(GrblProtocol):
         """Open the connection afresh and read where the engraver says the head is."""
         self.close()
         self.buffer = b""
+        self.outbox = ""
         self.interrupted = False
         self.out_of_step = False
+        self.unanswered = []
         self.head = None
         try:
             self.engraver = Engraver(self.host, self.http_port, self.ws_port)
@@ -176,11 +183,25 @@ class WifiMachine(GrblProtocol):
         return GrblError("Lost the WiFi connection to the engraver. Press Reconnect.")
 
     def _write(self, data):
+        # Every request to the engraver costs a few tenths of a second, so
+        # lines wait here and travel together once an answer is wanted.
+        text = data.decode()
+        if len(text) > 1:
+            self.outbox += text
+        else:
+            self._deliver()
+            self._command(text)
+
+    def _deliver(self):
+        if self.outbox:
+            lines, self.outbox = self.outbox, ""
+            self._command(lines.strip())
+
+    def _command(self, text):
         if self.engraver is None:
             raise self._lost()
-        text = data.decode()
         try:
-            self.engraver.command(text.strip() if len(text) > 1 else text)
+            self.engraver.command(text)
         except OSError:
             raise self._lost()
 
@@ -192,6 +213,7 @@ class WifiMachine(GrblProtocol):
         return line + b"\n"
 
     def _readline(self):
+        self._deliver()
         line = self._take_line()
         if line:
             return line
@@ -220,7 +242,9 @@ class WifiMachine(GrblProtocol):
 
     def _revive(self):
         """Reopen a connection that went quiet and died, if the head is still where it was left."""
-        if self.out_of_step or monotonic() - self.last_heard < self.quiet_seconds or self._answers():
+        if self.out_of_step or self.unanswered:
+            return
+        if monotonic() - self.last_heard < self.quiet_seconds or self._answers():
             return
         expected = self.head
         self.connect()
@@ -242,6 +266,7 @@ class WifiMachine(GrblProtocol):
         return super().status()
 
     def _reset_input(self):
+        self.outbox = ""
         self.buffer = b""
         if self.engraver is not None:
             try:

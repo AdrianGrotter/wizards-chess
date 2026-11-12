@@ -61,9 +61,9 @@ Once homing switches are installed, set `$22=1` on the engraver and
 
 ## Slow moves
 
-Add `slow` to a grid move or head move (`B1 C3 slow`, `A4 slow`) to run that one move at
-`slow_feed` from `config.json`: 1500 mm/min, which is 25 mm/s, for both the head's travel
-and the drag.
+Add `slow` to a grid move (`B1 C3 slow`) to drag that piece at `slow_feed` from
+`config.json`: 1500 mm/min, which is 25 mm/s. The head still travels to the piece at
+full speed.
 
 ## Moving without rules
 

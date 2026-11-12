@@ -245,7 +245,7 @@ def cmd_grid(cfg, machine, args):
                     notes.extend("Note: %s." % p for p in game.problems())
             elif kind in ("goto", "move"):
                 slow = command[-1]
-                restore = game.mover.at_speed(cfg.get("slow_feed", 1500)) if slow else None
+                restore = game.mover.dragging_at(cfg.get("slow_feed", 1500)) if slow else None
                 try:
                     if kind == "goto":
                         game.mover.goto(parse_square(command[1]))

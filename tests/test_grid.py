@@ -82,4 +82,5 @@ def test_slow_moves():
     assert parse_command("B1 C3 slow") == ("move", "b1", "c3", None, True)
     assert parse_command("e7 e8 n SLOW") == ("move", "e7", "e8", "n", True)
     assert parse_command("e7 e8 slow n") == ("move", "e7", "e8", "n", True)
-    assert parse_command("A4 slow") == ("goto", "a4", True)
+    with pytest.raises(ValueError, match="only slows down dragging"):
+        parse_command("A4 slow")

@@ -170,12 +170,15 @@ def test_every_slot_is_reachable_on_the_real_layout():
                 mover.check(Step(slot, square, leaves_board=True))
 
 
-def test_at_speed_applies_to_travel_and_drag_until_restored():
+def test_slow_drag_leaves_travel_at_full_speed():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    machine.head = None
     mover = make_mover(machine)
-    restore = mover.at_speed(1500)
+    machine.head = mover.geometry.square_mm("a1")
+    restore = mover.dragging_at(500)
     mover.run(Step((4, 1), (4, 3)))
     restore()
-    assert [l.split()[-1] for l in machine.lines if l.startswith("G53")] == ["F1500", "F1500"]
-    assert (mover.travel_feed, mover.drag_feed) == (3000, 1500)
+    magnet_on = machine.lines.index("M3 S1000")
+    travel = [l.split()[-1] for l in machine.lines[:magnet_on] if l.startswith("G53")]
+    drag = [l.split()[-1] for l in machine.lines[magnet_on:] if l.startswith("G53")]
+    assert set(travel) == {"F3000"} and drag == ["F500"]
+    assert mover.drag_feed == 1500

@@ -207,3 +207,13 @@ def test_dropped_connection_is_reopened_without_asking_again():
     play(app, "e2 e4")
     assert app.ready and app.state()["pieces"]["e4"] == "P"
     assert any(entry["text"] == "Reconnected to the engraver." for entry in app.state()["log"])
+
+
+def test_state_lists_the_legal_moves_of_each_piece():
+    app = started()
+    wait_for(lambda: not app.busy)
+    moves = app.state()["moves"]
+    assert sorted(moves["e2"]) == ["e3", "e4"] and sorted(moves["g1"]) == ["f3", "h3"]
+    assert "e1" not in moves and "e7" not in moves
+    play(app, "rules off")
+    assert app.state()["moves"] == {}

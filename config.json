@@ -8,7 +8,7 @@
   ],
   "magnet_power": 1000,
   "homing_switches": false,
-  "travel_feed": 6000,
+  "travel_feed": 18000,
   "drag_feed": 6000,
   "slow_feed": 1500,
   "board": {

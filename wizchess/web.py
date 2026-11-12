@@ -51,6 +51,7 @@ class App:
         self.log = []
         self.log_count = 0
         self.status = ""
+        self.moves = {}
         self._refresh()
 
     def say(self, text, error=False):
@@ -115,6 +116,7 @@ class App:
             "came_from": self.session.came_from,
             "rules": self.session.rules,
             "status": self.status,
+            "moves": self.moves,
             "busy": self.busy,
             "ready": self.ready,
             "question": self.question,
@@ -126,8 +128,17 @@ class App:
         board = game.board
         if not self.session.rules:
             self.status = "Rules are off: any piece can go anywhere"
+            self.moves = {}
             return
         problems = game.problems()
+        moves = {}
+        if not problems:
+            for move in board.legal_moves:
+                targets = moves.setdefault(chess.square_name(move.from_square), [])
+                target = chess.square_name(move.to_square)
+                if target not in targets:
+                    targets.append(target)
+        self.moves = moves
         side = self.session.side()
         if problems:
             self.status = "Not a playable position: " + "; ".join(problems)

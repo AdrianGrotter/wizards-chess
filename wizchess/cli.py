@@ -130,7 +130,12 @@ def cmd_grid(cfg, machine, args):
                 continue
             if kind == "reset":
                 game.board.reset()
-                came_from = None
+                game.mover.park()
+                head = came_from = None
+                print("Head is back in its corner. Set the pieces up in the starting position by hand.")
+            elif kind == "park":
+                game.mover.park()
+                head = None
             elif kind == "clear":
                 game.board.clear()
                 came_from = None

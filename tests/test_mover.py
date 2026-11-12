@@ -85,3 +85,9 @@ def test_mover_releases_magnet_when_a_drag_fails():
     with pytest.raises(RuntimeError):
         make_mover(machine).run(Step((0, 0), (0, 2)))
     assert machine.lines[-1] == "M5"
+
+
+def test_park_returns_the_head_to_the_corner_with_the_magnet_off():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    make_mover(machine).park()
+    assert machine.lines == ["G53 G1 X0.00 Y0.00 F3000"]

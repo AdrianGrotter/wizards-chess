@@ -8,7 +8,9 @@ GRID_HELP = """\
   A4              move the head under A4, magnet off
   put E4 N        place a piece on the grid (white: KQRBNP, black: kqrbnp)
   remove E4       take a piece off the grid
-  reset / clear   starting position / empty grid
+  reset           new game: starting position, head back to its corner
+  clear           empty grid (head stays where it is)
+  park            head back to its corner, magnet off
   grid            show the grid
   quit            leave
 Moves follow the chess rules and alternate between White and Black.
@@ -18,7 +20,7 @@ WORDS = {
     "quit": "quit", "exit": "quit", "q": "quit",
     "grid": "grid", "show": "grid",
     "help": "help", "?": "help", "h": "help",
-    "reset": "reset", "clear": "clear",
+    "reset": "reset", "clear": "clear", "park": "park",
     "put": "put", "remove": "remove", "del": "remove",
 }
 EXAMPLES = "Type a square (E4), a move (E2 E4), or 'help' for all commands."
@@ -56,7 +58,7 @@ def parse_command(text):
     """Turn a typed line into a command tuple, or ValueError with a message for the player.
 
     ("move", start, end, promotion or None), ("goto", sq), ("put", sq, piece),
-    ("remove", sq), ("reset",), ("clear",), ("grid",), ("help",), ("quit",)
+    ("remove", sq), ("reset",), ("clear",), ("park",), ("grid",), ("help",), ("quit",)
     Squares are returned in lower case; a put piece keeps its case (colour).
     """
     tokens = _tokens(text)

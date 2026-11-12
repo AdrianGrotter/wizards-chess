@@ -26,6 +26,7 @@ def test_remove_reset_clear():
     assert parse_command("remove E4") == ("remove", "e4")
     assert parse_command("reset") == ("reset",)
     assert parse_command("CLEAR") == ("clear",)
+    assert parse_command("park") == ("park",)
 
 
 @pytest.mark.parametrize(

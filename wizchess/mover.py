@@ -80,6 +80,11 @@ class Mover:
         x, y = self.geometry.to_mm(point)
         self.machine.move_to(x, y, self.travel_feed)
 
+    def park(self):
+        """Move the head, magnet off, to the machine's (0, 0) corner."""
+        self.machine.move_to(0, 0, self.travel_feed)
+        self.machine.wait_until_idle()
+
     def run(self, step):
         path = route(step.start, step.end, step.via_edges)
         self._check(path, step.leaves_board)

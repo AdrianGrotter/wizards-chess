@@ -165,7 +165,7 @@ class Game:
 
         for (s, t), step in zip(plan.moves, steps):
             try:
-                self.mover.run(step, self.occupied())
+                self.mover.run(step, self.occupied(), settle=False)
             except Exception as e:
                 self._tidy()
                 raise MoveInterrupted(
@@ -186,7 +186,7 @@ class Game:
                 continue
             step = Step(slot, grid(sq), leaves_board=True)
             try:
-                self.mover.run(step, self.occupied())
+                self.mover.run(step, self.occupied(), settle=False)
             except Exception as e:
                 self.graveyard.parked[_color_name(piece.color)].append((slot, piece))
                 self._tidy()
@@ -196,6 +196,14 @@ class Game:
                     % (_color_name(piece.color), chess.piece_name(piece.piece_type), chess.square_name(sq).upper(), e)
                 )
             self.board.set_piece_at(sq, piece)
+        try:
+            self.mover.machine.wait_until_idle()
+        except Exception as e:
+            self._tidy()
+            raise MoveInterrupted(
+                "The reset stopped before the engraver had finished: %s\n"
+                "Check that the pieces match the grid, then run reset again." % e
+            )
         plan.missing = missing
         if plan.missing:
             names = ", ".join(
@@ -449,10 +457,13 @@ class Game:
         done = 0
         try:
             for step in steps:
-                self.mover.run(step, occupied)
+                self.mover.run(step, occupied, settle=False)
                 occupied.discard(step.start)
                 occupied.add(step.end)
                 done += 1
+            done -= 1
+            self.mover.machine.wait_until_idle()
+            done += 1
         except Exception as e:
             raise MoveInterrupted(
                 self._interrupted(from_square, to_square, steps, done, removed_by_hand, e)

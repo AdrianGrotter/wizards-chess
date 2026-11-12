@@ -177,8 +177,12 @@ class Mover:
         self.machine.move_to(0, 0, self.travel_feed)
         self.machine.wait_until_idle()
 
-    def run(self, step, occupied=None):
-        """Drag one piece. occupied (grid points of the other pieces) lets routes go straight when clear."""
+    def run(self, step, occupied=None, settle=True):
+        """Drag one piece. occupied (grid points of the other pieces) lets routes go straight when clear.
+
+        With settle False the drag is only queued on the engraver; the caller
+        waits for the machine to finish once all its drags are queued.
+        """
         path = self.path(step, occupied)
         self._check(path, not step.leaves_board)
         self.goto(path[0], occupied)
@@ -196,4 +200,5 @@ class Mover:
             raise
         self.machine.magnet(False)
         self.machine.dwell(self.grab_seconds)
-        self.machine.wait_until_idle()
+        if settle:
+            self.machine.wait_until_idle()

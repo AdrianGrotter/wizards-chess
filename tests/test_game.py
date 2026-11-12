@@ -26,12 +26,12 @@ def test_knight_goes_around():
 
 def test_capture_clears_the_square_first():
     steps = steps_after(["e2e4", "d7d5"], "e4d5")
-    assert steps == [Step((3, 4), (8, 0), via_edges=True), Step((4, 3), (3, 4))]
+    assert steps == [Step((3, 4), (8, 0), via_edges=True, leaves_board=True), Step((4, 3), (3, 4))]
 
 
 def test_en_passant_removes_the_passed_pawn():
     steps = steps_after(["e2e4", "a7a6", "e4e5", "d7d5"], "e5d6")
-    assert steps == [Step((3, 4), (8, 0), via_edges=True), Step((4, 4), (3, 5))]
+    assert steps == [Step((3, 4), (8, 0), via_edges=True, leaves_board=True), Step((4, 4), (3, 5))]
 
 
 def test_kingside_castling_moves_king_then_rook():
@@ -115,7 +115,8 @@ def new_game():
         ("e2", "e5", "pawn can't move"),
         ("a1", "a3", "rook can't move"),
         ("c1", "e3", "bishop can't move"),
-        ("e1", "g1", "king can't move"),
+        ("e1", "g1", "occupied by your own knight"),
+        ("a1", "a2", "occupied by your own pawn"),
     ],
 )
 def test_illegal_moves_say_why(start, end, reason):

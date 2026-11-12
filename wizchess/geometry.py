@@ -1,11 +1,19 @@
 FILES = "abcdefgh"
 
+# Grid coordinates of the board's outer edges: half a square beyond a1 and h8.
+BOARD_EDGE_LOW = -0.5
+BOARD_EDGE_HIGH = 7.5
+
 
 def parse_square(name):
     name = name.strip().lower()
     if len(name) != 2 or name[0] not in FILES or name[1] not in "12345678":
         raise ValueError("Not a square: %r" % name)
     return (FILES.index(name[0]), int(name[1]) - 1)
+
+
+def on_board(point):
+    return all(BOARD_EDGE_LOW <= v <= BOARD_EDGE_HIGH for v in point)
 
 
 class Geometry:

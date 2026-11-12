@@ -44,7 +44,9 @@ def physical_steps(board, move, graveyard):
     captured = captured_square(board, move)
     if captured is not None and graveyard is not None:
         color = "white" if board.color_at(captured) == chess.WHITE else "black"
-        steps.append(Step(grid(captured), graveyard.next_slot(color), via_edges=True))
+        steps.append(
+            Step(grid(captured), graveyard.next_slot(color), via_edges=True, leaves_board=True)
+        )
 
     if board.is_castling(move):
         rank = chess.square_rank(move.from_square)
@@ -94,6 +96,11 @@ class Game:
             raise ValueError("There is no piece on %s." % start.upper())
         if piece.color != self.board.turn:
             raise ValueError("It's %s's turn." % side)
+        target = self.board.piece_at(to_square)
+        if target is not None and target.color == piece.color:
+            raise ValueError(
+                "%s is occupied by your own %s." % (end.upper(), chess.piece_name(target.piece_type))
+            )
         promotion_type = None
         if piece.piece_type == chess.PAWN and chess.square_rank(to_square) in (0, 7):
             promotion_type = chess.Piece.from_symbol(promotion or "q").piece_type

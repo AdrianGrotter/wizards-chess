@@ -26,12 +26,15 @@ class GcodeMachine:
         self.send("G21")
         self.send("G90")
 
-    def move_to(self, x, y, feed):
+    def check_reach(self, x, y):
         if not (0 <= x <= self.travel_mm[0] and 0 <= y <= self.travel_mm[1]):
             raise ValueError(
                 "(%.1f, %.1f) mm is outside the machine's %g x %g mm travel"
                 % (x, y, self.travel_mm[0], self.travel_mm[1])
             )
+
+    def move_to(self, x, y, feed):
+        self.check_reach(x, y)
         # G53 ignores any work offset stored on the engraver by other software.
         self.send("G53 G1 X%.2f Y%.2f F%d" % (x, y, feed), timeout=MOTION_TIMEOUT)
 

@@ -116,11 +116,14 @@
   form input { flex: 1; min-width: 0; }
   input[type=text]:focus, select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 14px rgba(232, 194, 106, .4); }
   .small { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
-  #question { display: none; border-color: var(--gold); animation: summon .35s ease-out, glow 2s ease-in-out infinite; }
+  #last { min-height: 1.5em; font-size: 15px; color: var(--muted); white-space: pre-wrap; }
+  #last.error { color: #ff9a92; }
+  #question { display: none; max-width: 640px; margin: 0 auto 18px; text-align: center; border-color: var(--gold); animation: summon .35s ease-out, glow 2s ease-in-out infinite; }
   #question.on { display: block; }
   @keyframes summon { from { transform: scale(.92); opacity: 0; } }
   @keyframes glow { 50% { box-shadow: 0 0 40px rgba(232, 194, 106, .55); } }
   #question p { margin: 0 0 12px; font-size: 17px; }
+  #question .row { justify-content: center; }
   #log { margin: 0; padding: 0; list-style: none; max-height: 300px; overflow: auto; font-size: 14.5px; }
   #log li { padding: 7px 0 7px 18px; border-bottom: 1px solid rgba(232, 194, 106, .12); white-space: pre-wrap;
             overflow-wrap: anywhere; position: relative; }
@@ -155,7 +158,16 @@
     <div class="rule">&#10022;</div>
     <div id="status">Summoning the board…</div>
     <div id="busy"><span>The pieces obey…</span></div>
+    <div id="last"></div>
   </header>
+  <div class="panel" id="question">
+    <h2>The board asks</h2>
+    <p id="question-text"></p>
+    <div class="row">
+      <button class="act primary" id="yes"></button>
+      <button class="act" id="no"></button>
+    </div>
+  </div>
   <main>
     <section>
       <div class="captured w" id="cap-white"></div>
@@ -164,14 +176,6 @@
       <p class="hint">Touch a piece, then the square it should go to. The spinning ring is the magnet.</p>
     </section>
     <section>
-      <div class="panel" id="question">
-        <h2>The board asks</h2>
-        <p id="question-text"></p>
-        <div class="row">
-          <button class="act primary" id="yes"></button>
-          <button class="act" id="no"></button>
-        </div>
-      </div>
       <div class="panel">
         <div id="offline">No answer from the board. Is it switched on and on this network?</div>
         <div class="row"><button id="stop">STOP</button></div>
@@ -288,6 +292,9 @@ function draw() {
     return li;
   }));
   lastLog = logKey;
+  const latest = entries[0];
+  $("last").textContent = latest && latest.text.length < 200 ? latest.text : "";
+  $("last").classList.toggle("error", !!latest && !!latest.error);
 }
 
 /* ---------- what changed since the last look ---------- */
@@ -500,7 +507,11 @@ async function command(text) {
 }
 
 function clicked(name) {
-  if (!state || state.question) return;
+  if (!state) return;
+  if (state.question) {
+    $("question").scrollIntoView({behavior: "smooth", block: "center"});
+    return;
+  }
   if (selected === null) {
     if (state.pieces[name]) { selected = name; sound.click(); }
   } else if (selected === name) {

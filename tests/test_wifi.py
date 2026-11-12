@@ -127,3 +127,32 @@ def test_unreachable_engraver_has_a_clear_message():
     machine = WifiMachine("127.0.0.1", (300, 320), 1000, http_port=port, ws_port=port)
     with pytest.raises(GrblError, match="Can't reach the engraver"):
         machine.connect()
+
+
+def test_idle_answers_the_engravers_pings(engraver):
+    machine = connect(engraver)
+    engraver._frame(9, b"hello")
+    machine.idle()
+    engraver.ws.settimeout(2)
+    pong = engraver.ws.recv(64)
+    assert pong[0] == 0x8A and len(pong) == 2 + 4 + 5
+
+
+def test_idle_notices_a_dropped_connection(engraver):
+    machine = connect(engraver)
+    engraver.ws.close()
+    for _ in range(50):
+        machine.idle()
+    assert machine.out_of_step
+
+
+def test_a_connection_that_died_quietly_is_reopened_before_use(engraver):
+    machine = connect(engraver)
+    machine.alive_seconds = 0.3
+    dead, engraver.ws = engraver.ws, socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    engraver.ws.connect(("127.0.0.1", 9))
+    machine.last_heard -= 60
+    machine.send("G4 P0")
+    assert engraver.lines[-3:] == ["G21", "G90", "G4 P0"]
+    assert machine.head == (12.0, 34.0)
+    dead.close()

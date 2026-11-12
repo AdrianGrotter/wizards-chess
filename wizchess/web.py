@@ -62,6 +62,7 @@ class App:
         self.answer = None
         self.question = {"text": message, "yes": yes, "no": no}
         while self.answer is None and not self.stopping:
+            self.machine.idle()
             time.sleep(0.05)
         self.question = None
         return self.answer is True
@@ -155,9 +156,14 @@ class App:
             ):
                 self.machine.set_setting(key, SUGGESTED_ACCELERATION)
 
-    def _start(self):
-        """Connect to the engraver and have the players confirm where the head is."""
+    def _start(self, after_dropout=False):
+        """Connect to the engraver and have the players confirm where the head is.
+
+        After a dropped connection the questions are skipped if the engraver
+        still has the head where this program last sent it.
+        """
         machine = self.machine
+        trusted = machine.head if (after_dropout and self.ready) else None
         self.ready = False
         if isinstance(machine, FakeMachine):
             machine.head = machine.head or (0.0, 0.0)
@@ -170,6 +176,10 @@ class App:
             raise MachineError("The connection to the engraver is out of step. Quit and start the program again.")
         else:
             machine.head = machine.position()
+        if trusted and machine.head and all(abs(a - b) < 0.05 for a, b in zip(trusted, machine.head)):
+            self.ready = True
+            self.say("Reconnected to the engraver.")
+            return
         self._check_settings()
         if self.cfg.get("homing_switches"):
             self.say("Homing...")
@@ -195,7 +205,7 @@ class App:
                 self._start()
                 return
             if getattr(self.machine, "out_of_step", False):
-                self._start()
+                self._start(after_dropout=True)
             moves = kind in MOVING_COMMANDS or command == ("reset", "pieces")
             if moves and not self.ready:
                 raise ValueError(
@@ -240,6 +250,7 @@ class App:
                 self.pending = None
                 self.busy = command is not None
             if command is None:
+                self.machine.idle()
                 time.sleep(0.05)
             else:
                 self._carry_out(command)

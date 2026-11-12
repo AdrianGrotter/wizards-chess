@@ -81,6 +81,9 @@ class GcodeMachine:
     def wait_until_idle(self):
         pass
 
+    def idle(self):
+        """Called regularly while nothing is being sent, to keep the connection alive."""
+
     def position(self):
         return None
 

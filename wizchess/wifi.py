@@ -13,7 +13,7 @@ import os
 import select
 import socket
 
-from .protocol import GrblError, GrblProtocol
+from .protocol import GrblError, GrblProtocol, monotonic
 
 
 def _address(host, port):
@@ -135,6 +135,10 @@ class WifiMachine(GrblProtocol):
     """Drives a GRBL engraver over WiFi. Call connect() before anything else, and again after a lost connection."""
 
     restart_hint = "Press Reconnect."
+    # A connection that has been quiet this long is checked before it is used:
+    # the network can drop it without either end being told.
+    quiet_seconds = 5
+    alive_seconds = 3
 
     def __init__(
         self, host, travel_mm, magnet_power, homing_switches=False, http_port=80, ws_port=81, timeout=10.0
@@ -146,6 +150,7 @@ class WifiMachine(GrblProtocol):
         self.engraver = None
         self.buffer = b""
         self.head = None
+        self.last_heard = 0
         self.silent_message = "The engraver at %s is on the network but did not answer." % host
 
     def connect(self):
@@ -193,10 +198,48 @@ class WifiMachine(GrblProtocol):
         if self.engraver is None:
             raise self._lost()
         try:
-            self.buffer += self.engraver.read_output(100)
+            data = self.engraver.read_output(100)
         except OSError:
             raise self._lost()
+        if data:
+            self.last_heard = monotonic()
+            self.buffer += data
         return self._take_line()
+
+    def _answers(self):
+        try:
+            self._reset_input()
+            self._write(b"?")
+            deadline = monotonic() + self.alive_seconds
+            while monotonic() < deadline:
+                if self._readline().startswith(b"<"):
+                    return True
+        except GrblError:
+            pass
+        return False
+
+    def _revive(self):
+        """Reopen a connection that went quiet and died, if the head is still where it was left."""
+        if self.out_of_step or monotonic() - self.last_heard < self.quiet_seconds or self._answers():
+            return
+        expected = self.head
+        self.connect()
+        if expected is not None and (
+            self.head is None or max(abs(a - b) for a, b in zip(expected, self.head)) > 0.05
+        ):
+            self.out_of_step = True
+            raise GrblError(
+                "The engraver no longer has the head where it was left: it was restarted "
+                "or moved by something else. Press Reconnect."
+            )
+
+    def send(self, line, timeout=None):
+        self._revive()
+        return super().send(line, timeout)
+
+    def status(self):
+        self._revive()
+        return super().status()
 
     def _reset_input(self):
         self.buffer = b""
@@ -206,6 +249,17 @@ class WifiMachine(GrblProtocol):
                     pass
             except OSError:
                 raise self._lost()
+
+    def idle(self):
+        # The engraver drops a WebSocket that stops answering its pings, and
+        # pings are only answered while its output is being read.
+        if self.engraver is None or self.out_of_step:
+            return
+        try:
+            while self.engraver.read_output(0):
+                pass
+        except OSError:
+            self.out_of_step = True
 
     def close(self):
         if self.engraver is not None:

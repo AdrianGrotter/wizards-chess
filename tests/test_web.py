@@ -190,3 +190,20 @@ def test_reset_grid_forgets_the_captured_pieces():
     for text in ["e2 e4", "d7 d5", "e4 d5", "reset grid"]:
         play(app, text)
     assert app.state()["parked"] == {"white": "", "black": ""}
+
+
+class Dropping(Engraver):
+    def connect(self):
+        self.out_of_step = False
+        self.head = self.position()
+
+
+def test_dropped_connection_is_reopened_without_asking_again():
+    app = started(Dropping())
+    for _ in range(3):
+        answer(app, True)
+    wait_for(lambda: not app.busy)
+    app.machine.out_of_step = True
+    play(app, "e2 e4")
+    assert app.ready and app.state()["pieces"]["e4"] == "P"
+    assert any(entry["text"] == "Reconnected to the engraver." for entry in app.state()["log"])

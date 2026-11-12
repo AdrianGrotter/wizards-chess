@@ -99,7 +99,7 @@ slightly rotated is still hit dead centre.
 
 The machine reaches about 300 × 324 mm, so there is a spare strip beyond each side's back
 rank. With `graveyard` set in `config.json`, a captured piece is dragged into a row there:
-White's below rank 1, Black's above rank 8, half a square (17 mm) apart, filling from the
+White's below rank 1, Black's above rank 8, half a square (16.5 mm with 33 mm squares) apart, filling from the
 middle outwards. A row has 17 places, more than the 15 pieces a side can lose. Pieces
 travel along the lines between squares, run along the board's edge, and step straight
 out into their place.

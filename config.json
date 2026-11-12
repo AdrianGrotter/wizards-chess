@@ -7,21 +7,21 @@
   ],
   "magnet_power": 1000,
   "homing_switches": false,
-  "travel_feed": 4000,
-  "drag_feed": 2000,
+  "travel_feed": 6000,
+  "drag_feed": 6000,
   "slow_feed": 1500,
   "board": {
     "a1": [
-      31,
-      41
+      34.5,
+      44.5
     ],
     "h1": [
-      269,
-      41
+      265.5,
+      44.5
     ],
     "a8": [
-      31,
-      279
+      34.5,
+      275.5
     ]
   },
   "graveyard": {

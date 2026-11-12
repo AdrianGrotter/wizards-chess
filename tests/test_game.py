@@ -182,3 +182,32 @@ def test_rook_blocked_further_along():
     game.board.set_fen("4k3/8/8/p7/8/8/8/R3K3 w - - 0 1")
     with pytest.raises(ValueError, match="The rook on A1 is blocked by Black's pawn on A5."):
         game.move_between("a1", "a8")
+
+
+def test_grid_move_captures_an_opponents_piece():
+    game = new_game()
+    for m in ["e4", "d5"]:
+        game.play(m)
+    removed = []
+    game.remove_by_hand = removed.append
+    game.play_move(game.move_between("e4", "d5"))
+    assert removed == ["d5"]
+    assert game.board.piece_at(chess.D5).symbol() == "P"
+    assert len(game.board.piece_map()) == 31
+
+
+@pytest.mark.parametrize(
+    "setup, start, end, message",
+    [
+        (["e4", "e5"], "d1", "d2", "D2 is occupied by your own pawn."),
+        (["e4", "e5"], "f1", "g2", "G2 is occupied by your own pawn."),
+        (["e4", "e5"], "e8", "e7", "It's White's turn."),
+        (["e4", "e5", "Nf3"], "d8", "d7", "D7 is occupied by your own pawn."),
+    ],
+)
+def test_friendly_pieces_cannot_be_taken(setup, start, end, message):
+    game = new_game()
+    for m in setup:
+        game.play(m)
+    with pytest.raises(ValueError, match=message):
+        game.move_between(start, end)

@@ -411,3 +411,18 @@ def test_free_move_along_an_empty_file_goes_straight():
     game.board.set_fen("4k3/8/8/8/8/8/8/R3K3 w - - 0 1")
     game.free_move("a1", "a7")
     assert drag_lines(machine) == ["G53 G1 X31.00 Y245.00 F1500"]
+
+
+def test_castling_through_an_attacked_square_says_so():
+    game = new_game()
+    game.board.set_fen("4k3/8/8/8/8/8/5r2/R3K2R w KQ - 0 1")
+    with pytest.raises(ValueError, match="can't castle out of, through or into check"):
+        game.move_between("e1", "g1")
+    assert game.move_between("e1", "c1") is not None
+
+
+def test_castling_past_a_piece_next_to_the_rook_names_it():
+    game = new_game()
+    game.board.set_fen("4k3/8/8/8/8/8/8/RN2K3 w Q - 0 1")
+    with pytest.raises(ValueError, match="blocked by your knight on B1"):
+        game.move_between("e1", "c1")

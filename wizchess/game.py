@@ -30,7 +30,7 @@ def grid(square):
 
 
 def place(point):
-    if on_board(point) and float(point[0]).is_integer() and float(point[1]).is_integer():
+    if on_board(point) and point[0] == int(point[0]) and point[1] == int(point[1]):
         return square_name(point).upper()
     return "beside the board"
 
@@ -139,6 +139,8 @@ class Game:
 
     def reset(self):
         self.board.reset()
+        if self.graveyard is not None:
+            self.graveyard.clear()
 
     def reset_pieces(self, ask_player):
         """Drag every piece back to its starting square and start a new game.
@@ -294,17 +296,12 @@ class Game:
         if move in self.board.legal_moves:
             return move
         if self.board.is_pseudo_legal(move):
-            if self.board.is_castling(move):
-                raise ValueError("%s can't castle out of, through or into check." % side)
             raise ValueError("That would leave the %s king in check." % side.lower())
+        if self._looks_like_castling(piece, from_square, to_square):
+            raise ValueError(self._castling_reason(piece, from_square, to_square, side))
         reason = self._blocked_reason(piece, from_square, to_square)
         if reason:
             raise ValueError(reason)
-        if self._looks_like_castling(piece, from_square, to_square):
-            raise ValueError(
-                "%s can no longer castle on that side: the king or that rook has already moved."
-                % side
-            )
         raise ValueError(
             "A %s can't move from %s to %s."
             % (chess.piece_name(piece.piece_type), start.upper(), end.upper())
@@ -318,6 +315,37 @@ class Game:
             and chess.square_rank(to_square) == chess.square_rank(home)
             and abs(chess.square_file(to_square) - chess.square_file(home)) == 2
         )
+
+    def _castling_reason(self, king, from_square, to_square, side):
+        """Why the king can't castle toward to_square."""
+        kingside = to_square > from_square
+        if kingside:
+            allowed = self.board.has_kingside_castling_rights(king.color)
+        else:
+            allowed = self.board.has_queenside_castling_rights(king.color)
+        if not allowed:
+            return "%s can no longer castle on that side: the king or that rook has already moved." % side
+        rook_square = chess.square(7 if kingside else 0, chess.square_rank(from_square))
+        blocked = self._blocker_between(king, from_square, rook_square)
+        return blocked or "%s can't castle out of, through or into check." % side
+
+    def _blocker_between(self, piece, from_square, to_square):
+        """A message naming the first piece standing between the two squares, if any."""
+        between = sorted(
+            chess.SquareSet(chess.between(from_square, to_square)),
+            key=lambda sq: chess.square_distance(sq, from_square),
+        )
+        for square in between:
+            blocker = self.board.piece_at(square)
+            if blocker:
+                return "The %s on %s is blocked by %s %s on %s." % (
+                    chess.piece_name(piece.piece_type),
+                    chess.square_name(from_square).upper(),
+                    self._owner(blocker, piece),
+                    chess.piece_name(blocker.piece_type),
+                    chess.square_name(square).upper(),
+                )
+        return None
 
     def _owner(self, piece, mover):
         if piece.color == mover.color:
@@ -339,25 +367,12 @@ class Game:
             or (kind == chess.QUEEN and (straight or diagonal))
             or (kind == chess.PAWN and df == 0 and (dr == forward or (
                 dr == 2 * forward and chess.square_rank(from_square) == start_rank)))
-            or (kind == chess.KING and dr == 0 and abs(df) == 2)
         )
         if not follows_pattern:
             return None
-        between = sorted(
-            chess.SquareSet(chess.between(from_square, to_square)),
-            key=lambda sq: chess.square_distance(sq, from_square),
-        )
-        name = chess.piece_name(kind)
-        for square in between:
-            blocker = self.board.piece_at(square)
-            if blocker:
-                return "The %s on %s is blocked by %s %s on %s." % (
-                    name,
-                    chess.square_name(from_square).upper(),
-                    self._owner(blocker, piece),
-                    chess.piece_name(blocker.piece_type),
-                    chess.square_name(square).upper(),
-                )
+        blocked = self._blocker_between(piece, from_square, to_square)
+        if blocked:
+            return blocked
         target = self.board.piece_at(to_square)
         if kind == chess.PAWN and target:
             return "A pawn can't capture straight ahead: %s is held by %s %s." % (

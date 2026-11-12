@@ -28,10 +28,28 @@ def test_remove_reset_clear():
     assert parse_command("CLEAR") == ("clear",)
 
 
-@pytest.mark.parametrize("text", ["I4 -> C2", "A9", "A4 -> A4", "jump", "A4 -> C2 fast", "A4 -> C2 k", "put e4 x"])
-def test_rejects_nonsense(text):
-    with pytest.raises(ValueError):
+@pytest.mark.parametrize(
+    "text, message",
+    [
+        ("I4 -> C2", "I4 is not on the board: columns go from A to H."),
+        ("A9", "A9 is not on the board: rows go from 1 to 8."),
+        ("A0", "A0 is not on the board: rows go from 1 to 8."),
+        ("e44", "E44 is not on the board: rows go from 1 to 8."),
+        ("A4 -> 44", "'44' is not a square."),
+        ("A4 -> A4", "A4 -> A4 starts and ends on the same square."),
+        ("jump", "Unknown command 'jump'."),
+        ("A4 -> C2 fast", "Unexpected 'fast' after the move."),
+        ("A4 -> C2 k", "Unexpected 'k' after the move."),
+        ("put e4 x", "'x' is not a piece."),
+        ("put e4", "Use put with a square and a piece"),
+        ("remove", "Use remove with one square"),
+        ("reset now", "'reset' doesn't take anything after it."),
+    ],
+)
+def test_clear_error_messages(text, message):
+    with pytest.raises(ValueError) as error:
         parse_command(text)
+    assert str(error.value).startswith(message)
 
 
 def test_render_shows_pieces_head_and_origin():

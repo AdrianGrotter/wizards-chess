@@ -14,45 +14,91 @@ GRID_HELP = """\
 Moves follow the chess rules and alternate between White and Black.
 Pieces: upper case white, lower case black. [ ] is the head, o where the last piece came from."""
 
-_MOVE = re.compile(r"^([a-h][1-8])\s*(?:->|-|\s+to\s+|\s*)\s*([a-h][1-8])(?:\s*=?\s*([qrbn]))?$")
-_SQUARE = re.compile(r"^([a-h][1-8])$")
-_PUT = re.compile(r"^put\s+([a-h][1-8])\s+([kqrbnp])$", re.IGNORECASE)
-_REMOVE = re.compile(r"^(?:remove|del)\s+([a-h][1-8])$")
+WORDS = {
+    "quit": "quit", "exit": "quit", "q": "quit",
+    "grid": "grid", "show": "grid",
+    "help": "help", "?": "help", "h": "help",
+    "reset": "reset", "clear": "clear",
+    "put": "put", "remove": "remove", "del": "remove",
+}
+EXAMPLES = "Type a square (E4), a move (E2 -> E4), or 'help' for all commands."
+
+_COMPACT_MOVE = re.compile(r"^([a-z]\d+)([a-z]\d+)([a-z])?$")
+
+
+def square(token):
+    """A typed square in lower case, or ValueError explaining what is wrong with it."""
+    token = token.lower()
+    if len(token) == 2 and token[0].isalpha() and token[1].isdigit():
+        if token[0] not in FILES:
+            raise ValueError("%s is not on the board: columns go from A to H." % token.upper())
+        if token[1] not in "12345678":
+            raise ValueError("%s is not on the board: rows go from 1 to 8." % token.upper())
+        return token
+    if len(token) >= 2 and token[0].isalpha() and token[1:].isdigit():
+        raise ValueError("%s is not on the board: rows go from 1 to 8." % token.upper())
+    raise ValueError(
+        "'%s' is not a square. A square is a column A-H and a row 1-8, like E4." % token
+    )
+
+
+def _tokens(text):
+    text = text.replace("->", " ").replace("=", " ")
+    tokens = [t for t in re.split(r"\s+|-", text.strip()) if t and t.lower() != "to"]
+    if tokens:
+        match = _COMPACT_MOVE.match(tokens[0].lower())
+        if match:
+            tokens = [g for g in match.groups() if g] + tokens[1:]
+    return tokens
 
 
 def parse_command(text):
-    """Turn a typed line into a command tuple. Squares are returned in lower case.
+    """Turn a typed line into a command tuple, or ValueError with a message for the player.
 
     ("move", start, end, promotion or None), ("goto", sq), ("put", sq, piece),
     ("remove", sq), ("reset",), ("clear",), ("grid",), ("help",), ("quit",)
+    Squares are returned in lower case; a put piece keeps its case (colour).
     """
-    stripped = text.strip()
-    match = _PUT.match(stripped)
-    if match:
-        square, piece = match.groups()
-        return ("put", square.lower(), piece)
-    text = stripped.lower()
-    if text in ("quit", "exit", "q"):
-        return ("quit",)
-    if text in ("grid", "show", ""):
+    tokens = _tokens(text)
+    if not tokens:
         return ("grid",)
-    if text in ("help", "?", "h"):
-        return ("help",)
-    if text in ("reset", "clear"):
-        return (text,)
-    match = _REMOVE.match(text)
-    if match:
-        return ("remove", match.group(1))
-    match = _MOVE.match(text)
-    if match:
-        start, end, promotion = match.groups()
-        if start == end:
-            raise ValueError("Start and end are the same square")
-        return ("move", start, end, promotion)
-    match = _SQUARE.match(text)
-    if match:
-        return ("goto", match.group(1))
-    raise ValueError("Didn't understand %r. Type 'help'." % stripped)
+    word = WORDS.get(tokens[0].lower())
+
+    if word == "put":
+        if len(tokens) != 3:
+            raise ValueError("Use put with a square and a piece, like: put E4 N")
+        piece = tokens[2]
+        if len(piece) != 1 or piece.upper() not in "KQRBNP":
+            raise ValueError(
+                "'%s' is not a piece. Use K Q R B N P for white, k q r b n p for black." % piece
+            )
+        return ("put", square(tokens[1]), piece)
+    if word == "remove":
+        if len(tokens) != 2:
+            raise ValueError("Use remove with one square, like: remove E4")
+        return ("remove", square(tokens[1]))
+    if word:
+        if len(tokens) > 1:
+            raise ValueError("'%s' doesn't take anything after it." % tokens[0])
+        return (word,)
+
+    if not (tokens[0][:1].isalpha() and tokens[0][1:].isdigit()):
+        raise ValueError("Unknown command '%s'. %s" % (tokens[0], EXAMPLES))
+    start = square(tokens[0])
+    if len(tokens) == 1:
+        return ("goto", start)
+    end = square(tokens[1])
+    if start == end:
+        raise ValueError("%s -> %s starts and ends on the same square." % (start.upper(), end.upper()))
+    promotion = None
+    if len(tokens) >= 3:
+        promotion = tokens[2].lower()
+        if len(tokens) > 3 or promotion not in "qrbn" or len(promotion) != 1:
+            raise ValueError(
+                "Unexpected '%s' after the move. Only a promotion piece can follow: Q, R, B or N."
+                % " ".join(tokens[2:])
+            )
+    return ("move", start, end, promotion)
 
 
 def render(pieces=None, head=None, came_from=None):

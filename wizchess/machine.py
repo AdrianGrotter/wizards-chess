@@ -20,6 +20,7 @@ class GcodeMachine:
         self.magnet_power = int(magnet_power)
         self.homing_switches = homing_switches
         self.head = (0.0, 0.0)
+        self.interrupted = False
 
     def send(self, line, timeout=None):
         raise NotImplementedError
@@ -65,9 +66,17 @@ class GcodeMachine:
     def settings(self):
         return {}
 
+    def interrupt(self):
+        """Make a command that is waiting on the engraver give up. Safe to call from another thread.
+
+        The thread that was waiting gets a MachineError and must then call stop().
+        """
+        self.interrupted = True
+
     def stop(self):
         """Halt all motion at once, including queued moves, and switch the magnet off."""
         self.head = None
+        self.interrupted = False
 
     def wait_until_idle(self):
         pass

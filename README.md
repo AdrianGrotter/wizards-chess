@@ -86,8 +86,8 @@ anything about the position that a real game couldn't reach.
 
 ## Resetting the board
 
-`reset` in the grid drags every piece back to its starting square, along the lines
-between squares so nothing is knocked over. It asks the players to:
+`reset` in the grid drags every piece back to its starting square, following the routing
+rule above so nothing is knocked over. It asks the players to:
 
 1. lift off pieces that have no starting square (such as a second queen from a
    promotion), before anything moves;

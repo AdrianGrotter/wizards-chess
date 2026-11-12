@@ -18,28 +18,28 @@ def steps_after(moves, last):
 
 
 def test_pawn_moves_straight():
-    assert steps_after([], "e2e4") == [Step((4, 1), (4, 3))]
+    assert steps_after([], "e2e4") == [Step((4, 1), (4, 3), via_edges=None)]
 
 
 def test_knight_goes_around():
-    assert steps_after([], "g1f3") == [Step((6, 0), (5, 2), via_edges=True)]
+    assert steps_after([], "g1f3") == [Step((6, 0), (5, 2), via_edges=None)]
 
 
 def test_capture_clears_the_square_first():
     steps = steps_after(["e2e4", "d7d5"], "e4d5")
-    assert steps == [Step((3, 4), (3.5, 8), leaves_board=True), Step((4, 3), (3, 4))]
+    assert steps == [Step((3, 4), (3.5, 8), leaves_board=True), Step((4, 3), (3, 4), via_edges=None)]
 
 
 def test_en_passant_removes_the_passed_pawn():
     steps = steps_after(["e2e4", "a7a6", "e4e5", "d7d5"], "e5d6")
-    assert steps == [Step((3, 4), (3.5, 8), leaves_board=True), Step((4, 4), (3, 5))]
+    assert steps == [Step((3, 4), (3.5, 8), leaves_board=True), Step((4, 4), (3, 5), via_edges=None)]
 
 
 def test_kingside_castling_moves_king_then_rook():
     moves = ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6"]
     assert steps_after(moves, "e1g1") == [
         Step((4, 0), (6, 0)),
-        Step((7, 0), (5, 0), via_edges=True),
+        Step((7, 0), (5, 0), via_edges=None),
     ]
 
 
@@ -96,7 +96,7 @@ def test_scholars_mate_reports_checkmate():
 
 
 def test_without_graveyard_the_captured_piece_is_left_to_the_players():
-    assert steps_after_no_graveyard(["e2e4", "d7d5"], "e4d5") == [Step((4, 3), (3, 4))]
+    assert steps_after_no_graveyard(["e2e4", "d7d5"], "e4d5") == [Step((4, 3), (3, 4), via_edges=None)]
 
 
 def steps_after_no_graveyard(moves, last):
@@ -376,3 +376,38 @@ def test_free_move_onto_a_piece_parks_it_first():
 def test_free_move_from_an_empty_square_is_refused():
     with pytest.raises(ValueError, match="There is no piece on E4"):
         new_game().free_move("e4", "e5")
+
+
+def drag_lines(machine):
+    start = machine.lines.index("M3 S1000")
+    return [l for l in machine.lines[start:machine.lines.index("M5", start)] if l.startswith("G53")]
+
+
+def test_pawn_and_queen_moves_go_straight():
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    game = Game(Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 3000, 1500))
+    game.play("e4")
+    assert drag_lines(machine) == ["G53 G1 X167.00 Y143.00 F1500"]
+    game.play("e5")
+    machine.lines.clear()
+    game.play("Qh5")
+    assert drag_lines(machine) == ["G53 G1 X269.00 Y177.00 F1500"]
+
+
+def test_knight_takes_the_gutters_only_when_hemmed_in():
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    game = Game(Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 3000, 1500))
+    game.play("Nf3")
+    assert len(drag_lines(machine)) == 3
+    game.board.set_fen("4k3/8/8/8/8/8/8/4K1N1 w - - 0 1")
+    machine.lines.clear()
+    game.play("Nf3")
+    assert drag_lines(machine) == ["G53 G1 X201.00 Y109.00 F1500"]
+
+
+def test_free_move_along_an_empty_file_goes_straight():
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    game = Game(Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 3000, 1500))
+    game.board.set_fen("4k3/8/8/8/8/8/8/R3K3 w - - 0 1")
+    game.free_move("a1", "a7")
+    assert drag_lines(machine) == ["G53 G1 X31.00 Y245.00 F1500"]

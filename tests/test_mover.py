@@ -182,3 +182,32 @@ def test_slow_drag_leaves_travel_at_full_speed():
     drag = [l.split()[-1] for l in machine.lines[magnet_on:] if l.startswith("G53")]
     assert set(travel) == {"F3000"} and drag == ["F500"]
     assert mover.drag_feed == 1500
+
+
+def test_is_clear_keeps_half_a_square_from_other_pieces():
+    from wizchess.mover import is_clear
+
+    assert is_clear([(4, 1), (4, 3)], {(3, 1), (5, 1), (4, 0)})
+    assert not is_clear([(4, 1), (4, 3)], {(4, 2)})
+    assert not is_clear([(6, 0), (5, 2)], {(6, 1)})
+    assert is_clear([(3, 0), (7, 4)], {(4, 0), (5, 1)})
+
+
+def test_auto_route_goes_straight_when_clear_and_through_gutters_when_blocked():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    mover = make_mover(machine)
+    knight = Step((6, 0), (5, 2), via_edges=None)
+    assert mover.path(knight, occupied=set()) == [(6, 0), (5, 2)]
+    assert mover.path(knight, occupied={(6, 1)}) == route((6, 0), (5, 2), via_edges=True)
+    assert mover.path(knight) == route((6, 0), (5, 2), via_edges=True)
+
+
+def test_head_goes_straight_when_nothing_is_in_the_way():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    mover = make_mover(machine)
+    machine.head = mover.geometry.square_mm("e2")
+    mover.goto((4, 5), occupied={(3, 1), (5, 1)})
+    assert machine.lines == ["G53 G1 X167.00 Y201.00 F3000"]
+    machine.lines.clear()
+    mover.goto((4, 1), occupied={(4, 3)})
+    assert len(machine.lines) > 1

@@ -120,10 +120,9 @@ def physical_steps(board, move, graveyard):
         else:
             rook_from, rook_to = (0, rank), (3, rank)
         steps.append(Step(grid(move.from_square), grid(move.to_square)))
-        steps.append(Step(rook_from, rook_to, via_edges=True))
+        steps.append(Step(rook_from, rook_to, via_edges=None))
     else:
-        is_knight = board.piece_type_at(move.from_square) == chess.KNIGHT
-        steps.append(Step(grid(move.from_square), grid(move.to_square), via_edges=is_knight))
+        steps.append(Step(grid(move.from_square), grid(move.to_square), via_edges=None))
     return steps
 
 
@@ -151,7 +150,7 @@ class Game:
         to the piece that was moving. Returns notes for the players.
         """
         plan = plan_reset(self.board)
-        steps = [Step(grid(s), grid(t), via_edges=True) for s, t in plan.moves]
+        steps = [Step(grid(s), grid(t), via_edges=None) for s, t in plan.moves]
         for step in steps:
             self.mover.check(step)
 
@@ -164,7 +163,7 @@ class Game:
 
         for (s, t), step in zip(plan.moves, steps):
             try:
-                self.mover.run(step)
+                self.mover.run(step, self.occupied())
             except Exception as e:
                 self._tidy()
                 raise MoveInterrupted(
@@ -185,7 +184,7 @@ class Game:
                 continue
             step = Step(slot, grid(sq), leaves_board=True)
             try:
-                self.mover.run(step)
+                self.mover.run(step, self.occupied())
             except Exception as e:
                 self.graveyard.parked[_color_name(piece.color)].append((slot, piece))
                 self._tidy()
@@ -238,6 +237,13 @@ class Game:
         self.board.castling_rights = self.board.clean_castling_rights()
         self.board.ep_square = None
         self.board.clear_stack()
+
+    def occupied(self):
+        """Grid points holding a piece: on the board, and parked beside it."""
+        points = {grid(sq) for sq in self.board.piece_map()}
+        if self.graveyard is not None:
+            points |= {slot for color in ("white", "black") for slot, _ in self.graveyard.parked[color]}
+        return {(float(f), float(r)) for f, r in points}
 
     def problems(self):
         return position_problems(self.board)
@@ -393,9 +399,9 @@ class Game:
         """Drag a piece anywhere, ignoring the chess rules. Returns notes for the players.
 
         A piece already on the target square is parked beside the board (or
-        lifted off by hand). The drag always runs along the lines between
-        squares, since without the rules the straight path may cross pieces.
-        Whose turn it is stays as it was.
+        lifted off by hand). The drag goes straight when nothing is in the
+        way and along the gutters between squares otherwise. Whose turn it
+        is stays as it was.
         """
         from_square, to_square = chess.parse_square(start), chess.parse_square(end)
         piece = self.board.piece_at(from_square)
@@ -406,7 +412,7 @@ class Game:
         if captured is not None and self.graveyard is not None:
             slot = self.graveyard.peek_slot(_color_name(self.board.color_at(captured)))
             steps.append(Step(grid(captured), slot, leaves_board=True))
-        steps.append(Step(grid(from_square), grid(to_square), via_edges=True))
+        steps.append(Step(grid(from_square), grid(to_square), via_edges=None))
         self._carry_out(from_square, to_square, steps, captured)
         self.board.remove_piece_at(to_square)
         self.board.set_piece_at(to_square, self.board.remove_piece_at(from_square))
@@ -424,10 +430,13 @@ class Game:
             if self.remove_by_hand(removed_by_hand) is False:
                 raise ValueError("Move called off. Nothing was moved.")
 
+        occupied = self.occupied()
         done = 0
         try:
             for step in steps:
-                self.mover.run(step)
+                self.mover.run(step, occupied)
+                occupied.discard(step.start)
+                occupied.add(step.end)
                 done += 1
         except Exception as e:
             raise MoveInterrupted(

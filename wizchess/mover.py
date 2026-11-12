@@ -62,6 +62,30 @@ def route_out(square, slot):
     return [p for i, p in enumerate(path) if i == 0 or p != path[i - 1]]
 
 
+# A moving piece or the empty head keeps at least this far (in squares) from
+# the centre of every other piece; half a square is the gap a piece has when
+# it passes between two neighbours along a gutter.
+CLEARANCE = 0.5
+
+
+def _distance_to_segment(p, a, b):
+    ax, ay = a
+    dx, dy = b[0] - ax, b[1] - ay
+    length = dx * dx + dy * dy
+    t = 0.0 if length == 0 else max(0.0, min(1.0, ((p[0] - ax) * dx + (p[1] - ay) * dy) / length))
+    cx, cy = ax + t * dx, ay + t * dy
+    return ((p[0] - cx) ** 2 + (p[1] - cy) ** 2) ** 0.5
+
+
+def is_clear(path, occupied):
+    """Whether every leg of path keeps CLEARANCE away from every occupied grid point."""
+    return all(
+        _distance_to_segment(p, a, b) >= CLEARANCE - 1e-9
+        for a, b in zip(path, path[1:])
+        for p in occupied
+    )
+
+
 def _line_toward(position, target):
     """The nearest line between squares from position, on target's side."""
     if _on_line(position):
@@ -99,6 +123,9 @@ def travel_route(start, end):
 class Step:
     """Drag one piece from one grid point to another.
 
+    via_edges True always uses the gutters between squares, False always
+    goes straight, and None goes straight unless another piece is in the
+    way (which needs the occupied squares when the step runs).
     leaves_board allows the route outside the board's edges, for parking
     captured pieces beside it.
     """
@@ -154,41 +181,57 @@ class Mover:
                 )
             self.machine.check_reach(*self.geometry.to_mm(point))
 
-    def path(self, step):
-        if not step.leaves_board:
-            return route(step.start, step.end, step.via_edges)
-        if on_board(step.start):
-            return route_out(step.start, step.end)
-        return list(reversed(route_out(step.end, step.start)))
+    def path(self, step, occupied=None):
+        if step.leaves_board:
+            if on_board(step.start):
+                return route_out(step.start, step.end)
+            return list(reversed(route_out(step.end, step.start)))
+        via_edges = step.via_edges
+        if via_edges is None:
+            others = None if occupied is None else set(occupied) - {step.start}
+            via_edges = others is None or not is_clear([step.start, step.end], others)
+        return route(step.start, step.end, via_edges)
 
     def check(self, step):
         """Refuse a step before anything moves if any part of it is off the board or out of reach."""
         self._check(self.path(step), not step.leaves_board)
 
-    def goto(self, point):
-        """Move the head, magnet off, to a grid point along the lines between squares."""
+    def goto(self, point, occupied=None):
+        """Move the head, magnet off, to a grid point.
+
+        It goes straight when that keeps clear of every occupied grid point,
+        and along the gutters between squares otherwise or when occupancy is
+        unknown.
+        """
+        point = tuple(point)
         here = self.head_grid()
-        path = [tuple(point)] if here is None else travel_route(here, point)[1:]
+        if here is None:
+            path = [point]
+        elif occupied is not None and is_clear([here, point], set(occupied) - {point}):
+            path = [point]
+        else:
+            path = travel_route(here, point)[1:]
         self._check(path, keep_on_board=False)
         for p in path:
             x, y = self.geometry.to_mm(p)
             self.machine.move_to(x, y, self.travel_feed)
 
-    def park(self):
+    def park(self, occupied=None):
         """Move the head, magnet off, to the machine's (0, 0) corner."""
         if self.machine.head is None:
             raise ValueError(
                 "The head's position is unknown, so it can't be parked. Push it into its corner by hand."
             )
         corner = self.geometry.to_grid((0.0, 0.0))
-        self.goto((_clamp(corner[0]), _clamp(corner[1])))
+        self.goto((_clamp(corner[0]), _clamp(corner[1])), occupied)
         self.machine.move_to(0, 0, self.travel_feed)
         self.machine.wait_until_idle()
 
-    def run(self, step):
-        path = self.path(step)
+    def run(self, step, occupied=None):
+        """Drag one piece. occupied (grid points of the other pieces) lets routes go straight when clear."""
+        path = self.path(step, occupied)
         self._check(path, not step.leaves_board)
-        self.goto(path[0])
+        self.goto(path[0], occupied)
         try:
             self.machine.magnet(True)
             self.machine.dwell(self.grab_seconds)

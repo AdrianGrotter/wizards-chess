@@ -93,12 +93,12 @@ def prepare(cfg, machine):
     return False
 
 
-def finish(mover):
+def finish(mover, occupied=None):
     """Park the head so the next session starts counting from the corner."""
     if mover.machine.head is None:
         print("The head's position is unknown: push it back into its corner before the next run.")
         return
-    mover.park()
+    mover.park(occupied)
     print("Head parked in its corner.")
 
 
@@ -186,7 +186,7 @@ def cmd_play(cfg, machine, args):
                 print(note)
         except (ValueError, MachineError) as e:
             print(e)
-    finish(game.mover)
+    finish(game.mover, game.occupied())
 
 
 def grid_pieces(board):
@@ -220,9 +220,9 @@ def cmd_grid(cfg, machine, args):
             elif kind == "reset":
                 came_from = None
                 notes = game.reset_pieces(tell_player)
-                game.mover.park()
+                game.mover.park(game.occupied())
             elif kind == "park":
-                game.mover.park()
+                game.mover.park(game.occupied())
             elif kind == "unlock":
                 machine.unlock()
                 notes.append("Alarm cleared.")
@@ -248,7 +248,7 @@ def cmd_grid(cfg, machine, args):
                 restore = game.mover.dragging_at(cfg.get("slow_feed", 1500)) if slow else None
                 try:
                     if kind == "goto":
-                        game.mover.goto(parse_square(command[1]))
+                        game.mover.goto(parse_square(command[1]), game.occupied())
                         machine.wait_until_idle()
                     else:
                         _, start, end, promotion, _ = command
@@ -267,7 +267,7 @@ def cmd_grid(cfg, machine, args):
         print(render(grid_pieces(game.board), head_square(game.mover), came_from))
         for note in notes:
             print(note)
-    finish(game.mover)
+    finish(game.mover, game.occupied())
 
 
 OUTLINE_CORNERS = ("a1", "a8", "h8", "h1")

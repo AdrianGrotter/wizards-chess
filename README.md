@@ -65,11 +65,22 @@ Add `slow` to a grid move (`B1 C3 slow`) to drag that piece at `slow_feed` from
 `config.json`: 1500 mm/min, which is 25 mm/s. The head still travels to the piece at
 full speed.
 
+## Routing
+
+A piece goes straight to its target, and the empty head straight to the piece, whenever
+the straight path stays at least half a square from every other piece. That covers most
+moves: a pawn stepping forward, a queen along an open diagonal, a rook along an open file.
+
+Only when a piece would pass closer than that (a knight hemmed in at the start, the rook
+in castling passing the king, any move with rules off that crosses pieces) does it use the
+gutters: it steps diagonally onto the lines between squares, follows them, and steps
+diagonally onto its target.
+
 ## Moving without rules
 
 `rules off` in the grid lets any piece go to any square (`A1 A8`), for testing and for
 fixing up the board. A piece on the target square is parked beside the board first (or
-lifted off by hand without a graveyard), every drag runs along the lines between squares,
+lifted off by hand without a graveyard), the drag follows the usual routing rule below,
 and whose turn it is stays unchanged. `rules on` switches the rules back on and points out
 anything about the position that a real game couldn't reach.
 
@@ -123,7 +134,7 @@ move off.
 | Module | Job | Runs on ESP32 later? |
 |---|---|---|
 | `geometry.py` | square name ↔ millimetres, from the a1/h1/a8 calibration | yes, as is |
-| `mover.py` | plans head and piece paths along the lines between squares | yes, as is |
+| `mover.py` | plans head and piece paths: straight when clear, gutters when not | yes, as is |
 | `machine.py` | the engraver as actions (`move_to`, `magnet`, `home`), plus a fake | yes, as is |
 | `grbl.py` | sends those actions over USB serial | replace with UART/WiFi |
 | `game.py` | chess rules (python-chess), captures, castling, en passant | needs a lighter chess library |

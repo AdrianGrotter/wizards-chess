@@ -3,6 +3,12 @@ import math
 from .geometry import BOARD_EDGE_HIGH, BOARD_EDGE_LOW, on_board
 
 
+# Grid points this close together (in squares) count as the same place. The
+# ESP32 computes with single-precision floats, which are only good to about
+# six digits.
+TOLERANCE = 1e-4
+
+
 def _sign(value):
     if value > 0:
         return 1
@@ -21,7 +27,7 @@ def _clamp(value):
 
 def _on_line(value):
     """Whether value lies on a line between squares (…, -0.5, 0.5, 1.5, …)."""
-    return abs((value + 0.5) - round(value + 0.5)) < 1e-6
+    return abs((value + 0.5) - round(value + 0.5)) < TOLERANCE
 
 
 def route(start, end, via_edges=False):
@@ -80,7 +86,7 @@ def _distance_to_segment(p, a, b):
 def is_clear(path, occupied):
     """Whether every leg of path keeps CLEARANCE away from every occupied grid point."""
     return all(
-        _distance_to_segment(p, a, b) >= CLEARANCE - 1e-9
+        _distance_to_segment(p, a, b) >= CLEARANCE - TOLERANCE
         for a, b in zip(path, path[1:])
         for p in occupied
     )
@@ -110,7 +116,7 @@ def travel_route(start, end):
     lines, and only leaves them for the last diagonal step onto end, so it
     never passes straight under another piece.
     """
-    start = (round(start[0], 6), round(start[1], 6))
+    start = (round(start[0], 4), round(start[1], 4))
     end = (float(end[0]), float(end[1]))
     if start == end:
         return [start]

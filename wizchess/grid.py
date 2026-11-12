@@ -52,11 +52,11 @@ def square(token):
 
 def _tokens(text):
     text = text.replace("->", " ").replace("=", " ")
-    tokens = [t for t in re.split(r"\s+|-", text.strip()) if t and t.lower() != "to"]
+    tokens = [t for t in text.replace("-", " ").split() if t.lower() != "to"]
     if tokens:
         match = _COMPACT_MOVE.match(tokens[0].lower())
         if match:
-            tokens = [g for g in match.groups() if g] + tokens[1:]
+            tokens = [g for g in (match.group(1), match.group(2), match.group(3)) if g] + tokens[1:]
     return tokens
 
 

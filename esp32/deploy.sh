@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copies the WiFi bridge and its settings onto the ESP32 and restarts it.
+# Copies the chess program and its settings onto the ESP32 and restarts it.
 # Run inside `nix develop`. MicroPython must already be on the board.
 set -euo pipefail
 
@@ -15,5 +15,19 @@ if [ "$port" != "auto" ]; then
   connect=(connect "$port")
 fi
 
-mpremote "${connect[@]}" cp config.json :config.json + cp main.py :main.py + reset
-echo "Bridge copied. The ESP32 restarts and joins the WiFi."
+# The game's own modules; cli, config and grbl need a laptop.
+modules=(__init__ geometry machine mover game reset grid session protocol wifi web)
+copies=()
+for module in "${modules[@]}"; do
+  copies+=(+ cp "../wizchess/$module.py" ":wizchess/$module.py")
+done
+
+mpremote "${connect[@]}" mkdir :wizchess 2>/dev/null || true
+mpremote "${connect[@]}" \
+  cp config.json :config.json \
+  + cp ../config.json :game.json \
+  + cp main.py :main.py + cp bridge.py :bridge.py + cp chess.py :chess.py \
+  "${copies[@]}" \
+  + cp ../wizchess/page.html :wizchess/page.html \
+  + reset
+echo "Copied. The ESP32 restarts, joins the WiFi and says where to open the page."

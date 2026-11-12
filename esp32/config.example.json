@@ -1,7 +1,10 @@
 {
+  "mode": "game",
   "wifi_ssid": "Your WiFi name",
   "wifi_password": "your WiFi password",
   "engraver_host": "10.10.2.242",
   "http_port": 80,
-  "websocket_port": 81
+  "websocket_port": 81,
+  "ap_ssid": "WizardChess",
+  "ap_password": "at least 8 characters"
 }

@@ -15,20 +15,29 @@ python -m pytest     # run the tests
 Plug the engraver in over USB. With `"port": "auto"` in `config.json` the tool finds it by
 its USB chip; a named port is used when it exists.
 
-## Connecting over WiFi (ESP32 bridge)
+## Running on the ESP32, without a laptop
 
-With `"link": "wifi"` in `config.json` the laptop talks to the ESP32 DevKitC (plugged in
-on its UART port) instead of the engraver's own USB port, and the ESP32 carries the
-G-code over WiFi:
+The ESP32 DevKitC can run the whole game by itself: the rules, the routing and the
+engraver control. It reaches the engraver over WiFi and serves a web page with the
+board; click a piece and then a square to move it.
 
 ```
-laptop ──USB──► ESP32 (esp32/main.py, MicroPython) ──WiFi──► engraver
+phone or laptop ──web page──► ESP32 (MicroPython) ──WiFi──► engraver
 ```
 
-The engraver takes network commands the way its web page sends them: each command is
-an HTTP request to `/command` on port 80, and its replies arrive on a WebSocket on port
-81. The engraver doesn't restart when a session starts this way, so it keeps track of
-the head between sessions. `"link": "usb"` goes back to the cable.
+The ESP32 only needs power from its USB port. It prints the page's address there when
+it starts, and the page can be reached in two ways:
+
+- on the shared WiFi, at the address it prints (also `http://wizardchess.local/`);
+- on the ESP32's own WiFi network (`ap_ssid` and `ap_password` in `esp32/config.json`),
+  at `http://192.168.4.1/`. Use this when the shared network keeps devices from
+  reaching each other, as guest networks do.
+
+Anyone who can open the page can move the pieces.
+
+When it starts, and after **Reconnect**, the page offers to fix risky engraver settings
+and asks whether the head is where the engraver believes it is. Until that is confirmed
+nothing moves. **STOP** halts the engraver at once.
 
 Setting up the ESP32 (inside `nix develop`):
 
@@ -38,7 +47,32 @@ Setting up the ESP32 (inside `nix develop`):
    from https://micropython.org/download/ESP32_GENERIC_S3/
 2. Copy `esp32/config.example.json` to `esp32/config.json` and fill in the WiFi and the
    engraver's address (it is git-ignored).
-3. `./esp32/deploy.sh` copies the bridge and its settings onto the board and restarts it.
+3. `./esp32/deploy.sh` copies the program and both config files onto the board and
+   restarts it. Run it again after changing `config.json`, for example after calibrating.
+
+python-chess is too big for the ESP32, so it uses `esp32/chess.py`, a small version of
+the same rules with the same interface. The tests check the two against each other, and
+`WIZCHESS_RULES=small python -m pytest` runs the whole suite on the small one.
+
+The engraver takes network commands the way its own web page sends them: each command
+is an HTTP request to `/command` on port 80, and its replies arrive on a WebSocket on
+port 81. The engraver doesn't restart when a session starts this way, so it keeps track
+of the head between sessions.
+
+### The same page from the laptop
+
+```sh
+python -m wizchess web          # then open http://localhost:8000/
+python -m wizchess --fake web   # practice: nothing really moves
+```
+
+This runs the game on the laptop, with the engraver on its USB cable.
+
+### The ESP32 as a plain WiFi cable
+
+With `"mode": "bridge"` in `esp32/config.json` and `"link": "wifi"` in `config.json`,
+the terminal commands below run on the laptop and the ESP32 (plugged into the laptop on
+its UART port) only carries their G-code to the engraver over WiFi.
 
 ## Commands
 
@@ -46,6 +80,7 @@ Add `--fake` before any command to print the G-code instead of moving the engrav
 
 ```sh
 python -m wizchess info            # engraver info and the settings that matter
+python -m wizchess web             # play from a web page in the browser
 python -m wizchess grid            # interactive grid: type A4 C2, chess rules enforced
 python -m wizchess jog             # interactive: move the head, drag pieces, calibrate
 python -m wizchess outline         # head visits A1, A8, H8, H1 in a circle, one per Enter
@@ -159,14 +194,18 @@ move off.
 
 ## Layout
 
-| Module | Job | Runs on ESP32 later? |
+| Module | Job | On the ESP32 |
 |---|---|---|
-| `geometry.py` | square name ↔ millimetres, from the a1/h1/a8 calibration | yes, as is |
-| `mover.py` | plans head and piece paths: straight when clear, gutters when not | yes, as is |
-| `machine.py` | the engraver as actions (`move_to`, `magnet`, `home`), plus a fake | yes, as is |
-| `grbl.py` | sends those actions over USB serial | replace with UART/WiFi |
-| `game.py` | chess rules (python-chess), captures, castling, en passant | needs a lighter chess library |
-| `reset.py` | plans the drags that put every piece back on its starting square | yes, with a lighter chess library |
+| `geometry.py` | square name ↔ millimetres, from the a1/h1/a8 calibration | yes |
+| `mover.py` | plans head and piece paths: straight when clear, gutters when not | yes |
+| `machine.py` | the engraver as actions (`move_to`, `magnet`, `home`), plus a fake | yes |
+| `protocol.py` | GRBL's conversation: send a line, wait for `ok`, read status, stop | yes |
+| `wifi.py` | carries that conversation over WiFi | yes |
+| `grbl.py` | carries it over USB serial | laptop only |
+| `game.py` | chess rules, captures, castling, en passant | yes, on `esp32/chess.py` |
+| `reset.py` | plans the drags that put every piece back on its starting square | yes |
+| `grid.py`, `session.py` | typed commands and what they do | yes |
+| `web.py`, `page.html` | the web page and the server behind it | yes |
 | `cli.py` | command line | laptop only |
 
 Positions are sent as machine coordinates (`G53`), so offsets that other software

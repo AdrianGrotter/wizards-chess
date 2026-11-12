@@ -1,5 +1,5 @@
 {
-  "link": "wifi",
+  "link": "usb",
   "port": "auto",
   "baud": 115200,
   "travel_mm": [

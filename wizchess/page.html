@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wizard's chess</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --panel: #ffffff; --text: #23211d; --muted: #6d675c; --line: #ddd6c8;
+    --light: #ecdcbb; --dark: #a9794f; --accent: #2f6f5e; --danger: #b3261e; --select: #f2c94c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #191815; --panel: #24221e; --text: #ece7dc; --muted: #a39c8e; --line: #3a372f;
+            --light: #cdbb98; --dark: #84603f; --accent: #6fbfa8; --danger: #ef6b62; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 16px; display: grid; gap: 20px;
+         grid-template-columns: minmax(0, 560px) minmax(260px, 1fr); align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+  h1 { font-size: 20px; margin: 0; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  #status { font-weight: 600; }
+  #busy { color: var(--accent); font-size: 14px; visibility: hidden; }
+  #busy.on { visibility: visible; }
+  .captured { min-height: 30px; font-size: 22px; letter-spacing: 2px; color: var(--muted); }
+  .captured small { font-size: 12px; letter-spacing: 0; margin-right: 6px; }
+  #board { display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); aspect-ratio: 1; width: 100%;
+           border: 2px solid var(--dark); border-radius: 6px; overflow: hidden; user-select: none; }
+  .sq { position: relative; min-width: 0; min-height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0;
+        border: 0; font-size: min(8.5vw, 50px); line-height: 1; cursor: pointer; font-family: inherit; }
+  .sq.l { background: var(--light); } .sq.d { background: var(--dark); }
+  .sq.w { color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 2px #000; }
+  .sq.b { color: #111; text-shadow: 0 0 2px rgba(255,255,255,.55); }
+  .sq.from::after { content: ""; position: absolute; inset: 0; background: rgba(242, 201, 76, .38); }
+  .sq.sel { outline: 4px solid var(--select); outline-offset: -4px; }
+  .sq.head::before { content: ""; position: absolute; inset: 9%; border: 2px dashed rgba(20, 20, 20, .6);
+                     border-radius: 50%; }
+  .sq span.n { position: absolute; left: 3px; bottom: 1px; font-size: 10px; font-weight: 600;
+               color: rgba(20, 20, 20, .6); text-shadow: none; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .panel + .panel { margin-top: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  button.act, input, select { font: inherit; border-radius: 8px; border: 1px solid var(--line);
+         background: var(--panel); color: var(--text); padding: 8px 12px; }
+  button.act { cursor: pointer; }
+  button.act:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { button.primary { color: #10201b; } }
+  #stop { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 700; flex: 1; padding: 12px; }
+  label { display: inline-flex; gap: 6px; align-items: center; }
+  form { display: flex; gap: 8px; }
+  form input { flex: 1; min-width: 0; }
+  #question { border-color: var(--accent); display: none; }
+  #question.on { display: block; }
+  #question p { margin: 0 0 10px; }
+  #log { margin: 0; padding: 0; list-style: none; max-height: 300px; overflow: auto; font-size: 14px; }
+  #log li { padding: 6px 0; border-bottom: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+  #log li:last-child { border-bottom: 0; }
+  #log li.error { color: var(--danger); }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  #offline { display: none; color: var(--danger); font-size: 14px; }
+  #offline.on { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <header>
+      <h1>Wizard's chess</h1>
+      <span id="busy">The board is moving…</span>
+    </header>
+    <div class="captured" id="cap-white"></div>
+    <div id="board"></div>
+    <div class="captured" id="cap-black"></div>
+    <p class="hint">Click a piece, then the square it should go to. The dashed ring is the magnet.</p>
+  </section>
+  <section>
+    <div class="panel" id="question">
+      <p id="question-text"></p>
+      <div class="row">
+        <button class="act primary" id="yes"></button>
+        <button class="act" id="no"></button>
+      </div>
+    </div>
+    <div class="panel">
+      <div id="status">Connecting…</div>
+      <div id="offline">No answer from the board. Is it switched on and on this network?</div>
+      <div class="row"><button class="act" id="stop">STOP</button></div>
+      <div class="row">
+        <button class="act" data-cmd="reset" data-confirm="Drag every piece back to its starting square?">New game</button>
+        <button class="act" data-cmd="park">Park magnet</button>
+        <button class="act" data-cmd="unlock">Unlock</button>
+        <button class="act" data-cmd="reconnect">Reconnect</button>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="slow"> Slow moves</label>
+        <label><input type="checkbox" id="free"> Ignore the rules</label>
+        <label>Promote to
+          <select id="promo"><option value="q">queen</option><option value="r">rook</option>
+            <option value="b">bishop</option><option value="n">knight</option></select></label>
+      </div>
+    </div>
+    <div class="panel">
+      <form id="typed">
+        <input id="text" placeholder="Type a command, like e2 e4 or put e4 N" autocomplete="off" autocapitalize="off">
+        <button class="act primary">Send</button>
+      </form>
+      <p class="hint">Also: remove e4 · turn black · reset grid · clear · help</p>
+    </div>
+    <div class="panel"><ul id="log"></ul></div>
+  </section>
+</main>
+<script>
+const GLYPH = {k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟"};
+const FILES = "abcdefgh";
+const $ = id => document.getElementById(id);
+let state = null, selected = null, notices = [], lastQuestion = null;
+
+const board = $("board");
+for (let rank = 8; rank >= 1; rank--) {
+  for (let f = 0; f < 8; f++) {
+    const name = FILES[f] + rank;
+    const sq = document.createElement("button");
+    sq.className = "sq " + ((f + rank) % 2 ? "l" : "d");
+    sq.dataset.sq = name;
+    sq.addEventListener("click", () => clicked(name));
+    board.appendChild(sq);
+  }
+}
+
+function glyphs(symbols) {
+  return [...symbols].map(s => GLYPH[s.toLowerCase()] + "︎").join("");
+}
+
+function draw() {
+  if (!state) return;
+  for (const sq of board.children) {
+    const name = sq.dataset.sq, piece = state.pieces[name];
+    sq.textContent = piece ? GLYPH[piece.toLowerCase()] + "︎" : "";
+    sq.classList.toggle("w", !!piece && piece === piece.toUpperCase());
+    sq.classList.toggle("b", !!piece && piece !== piece.toUpperCase());
+    sq.classList.toggle("sel", name === selected);
+    sq.classList.toggle("head", name === state.head);
+    sq.classList.toggle("from", name === state.came_from);
+    if (name[0] === "a" || name[1] === "1") {
+      const label = document.createElement("span");
+      label.className = "n";
+      label.textContent = name === "a1" ? "a1" : (name[0] === "a" ? name[1] : name[0]);
+      sq.appendChild(label);
+    }
+  }
+  $("status").textContent = state.status;
+  $("busy").classList.toggle("on", state.busy);
+  $("free").checked = !state.rules;
+  $("cap-white").innerHTML = state.parked.white ? "<small>Captured</small>" + glyphs(state.parked.white) : "";
+  $("cap-black").innerHTML = state.parked.black ? "<small>Captured</small>" + glyphs(state.parked.black) : "";
+  const q = state.question;
+  $("question").classList.toggle("on", !!q);
+  if (q && q.text !== lastQuestion) {
+    $("question-text").textContent = q.text;
+    $("yes").textContent = q.yes;
+    $("no").textContent = q.no;
+  }
+  lastQuestion = q ? q.text : null;
+  const entries = notices.concat(state.log).sort((a, b) => b.n - a.n);
+  $("log").replaceChildren(...entries.slice(0, 40).map(entry => {
+    const li = document.createElement("li");
+    li.textContent = entry.text;
+    if (entry.error) li.className = "error";
+    return li;
+  }));
+}
+
+function notice(text, error) {
+  const n = state && state.log.length ? state.log[state.log.length - 1].n : 0;
+  notices.push({n: n + 0.5, text, error});
+  notices = notices.slice(-10);
+  draw();
+}
+
+async function post(path, body) {
+  try {
+    const reply = await (await fetch(path, {method: "POST", body})).json();
+    if (reply.message) notice(reply.message, !reply.ok);
+    return reply.ok;
+  } catch (e) {
+    notice("The board did not answer.", true);
+    return false;
+  }
+}
+
+async function command(text) {
+  const ok = await post("/command", text);
+  refresh();
+  return ok;
+}
+
+function clicked(name) {
+  if (!state || state.question) return;
+  if (selected === null) {
+    if (state.pieces[name]) selected = name;
+  } else if (selected === name) {
+    selected = null;
+  } else {
+    const piece = state.pieces[selected];
+    let text = selected + " " + name;
+    if (state.rules && piece.toLowerCase() === "p" && (name[1] === "8" || name[1] === "1")) text += " " + $("promo").value;
+    if ($("slow").checked) text += " slow";
+    selected = null;
+    command(text);
+  }
+  draw();
+}
+
+async function refresh() {
+  try {
+    state = await (await fetch("/state")).json();
+    $("offline").classList.remove("on");
+    draw();
+  } catch (e) {
+    $("offline").classList.add("on");
+  }
+}
+
+for (const button of document.querySelectorAll("button[data-cmd]")) {
+  button.addEventListener("click", () => {
+    if (button.dataset.confirm && !confirm(button.dataset.confirm)) return;
+    command(button.dataset.cmd);
+  });
+}
+$("stop").addEventListener("click", () => post("/stop", ""));
+$("yes").addEventListener("click", () => post("/answer", "yes").then(refresh));
+$("no").addEventListener("click", () => post("/answer", "no").then(refresh));
+$("free").addEventListener("change", e => command("rules " + (e.target.checked ? "off" : "on")));
+$("typed").addEventListener("submit", e => {
+  e.preventDefault();
+  const text = $("text").value.trim();
+  if (text) command(text).then(ok => { if (ok) $("text").value = ""; });
+});
+
+refresh();
+setInterval(refresh, 700);
+</script>
+</body>
+</html>

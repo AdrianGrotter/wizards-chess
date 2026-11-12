@@ -11,6 +11,7 @@ from .geometry import Geometry, parse_square
 from .grid import GRID_HELP, parse_command, render, square
 from .machine import FakeMachine, MachineError
 from .mover import Mover, Step
+from .session import GridSession
 
 JOG_HELP = """\
   x 10 / y -5   move the head 10 mm in x / -5 mm in y
@@ -197,76 +198,25 @@ def grid_pieces(board):
 
 def cmd_grid(cfg, machine, args):
     game = make_game(cfg, machine)
-    came_from = None
-    rules = True
+    session = GridSession(game, cfg.get("slow_feed", 1500), tell_player)
     print(render(grid_pieces(game.board), head_square(game.mover)))
     print(GRID_HELP)
     while True:
-        side = "White" if game.board.turn == chess.WHITE else "Black"
         try:
-            command = parse_command(ask("%s> " % (side if rules else "Free")))
+            command = parse_command(ask("%s> " % (session.side() if session.rules else "Free")))
         except ValueError as e:
             print(e)
             continue
-        kind = command[0]
-        notes = []
+        if command[0] == "quit":
+            break
+        if command[0] == "help":
+            print(GRID_HELP)
+            continue
         try:
-            if kind == "quit":
-                break
-            if kind == "help":
-                print(GRID_HELP)
-                continue
-            if kind == "reset" and command[1] == "grid":
-                game.reset()
-                came_from = None
-            elif kind == "reset":
-                came_from = None
-                notes = game.reset_pieces(tell_player)
-                game.mover.park(game.occupied())
-            elif kind == "park":
-                game.mover.park(game.occupied())
-            elif kind == "unlock":
-                machine.unlock()
-                notes.append("Alarm cleared.")
-            elif kind == "clear":
-                game.clear()
-                came_from = None
-            elif kind == "put":
-                game.put(command[1], command[2])
-            elif kind == "remove":
-                game.remove(command[1])
-            elif kind == "turn":
-                game.set_turn(command[1])
-            elif kind == "rules":
-                rules = command[1] == "on"
-                notes.append(
-                    "Moves follow the chess rules again." if rules
-                    else "Rules are off: any piece can go to any square. Type 'rules on' to go back."
-                )
-                if rules:
-                    notes.extend("Note: %s." % p for p in game.problems())
-            elif kind in ("goto", "move"):
-                slow = command[-1]
-                restore = game.mover.dragging_at(cfg.get("slow_feed", 1500)) if slow else None
-                try:
-                    if kind == "goto":
-                        game.mover.goto(parse_square(command[1]), game.occupied())
-                        machine.wait_until_idle()
-                    else:
-                        _, start, end, promotion, _ = command
-                        if rules:
-                            notes = game.play_move(game.move_between(start, end, promotion))
-                        else:
-                            notes = game.free_move(start, end)
-                        came_from = start
-                finally:
-                    if restore:
-                        restore()
-            if kind in ("clear", "put", "remove", "turn"):
-                notes.extend("Note: %s." % p for p in game.problems())
+            notes = session.execute(command)
         except (ValueError, MachineError) as e:
-            notes.append(str(e))
-        print(render(grid_pieces(game.board), head_square(game.mover), came_from))
+            notes = [str(e)]
+        print(render(grid_pieces(game.board), head_square(game.mover), session.came_from))
         for note in notes:
             print(note)
     finish(game.mover, game.occupied())
@@ -424,6 +374,14 @@ def cmd_jog(cfg, machine, args):
     finish(mover)
 
 
+def cmd_web(cfg, machine, args):
+    from . import web
+
+    shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
+    print("Open http://%s:%d/ in a browser. Ctrl-C ends the program." % (shown, args.port))
+    web.run(cfg, machine, args.port, args.host)
+
+
 COMMANDS = {
     "info": cmd_info,
     "goto": cmd_goto,
@@ -433,7 +391,10 @@ COMMANDS = {
     "grid": cmd_grid,
     "jog": cmd_jog,
     "outline": cmd_outline,
+    "web": cmd_web,
 }
+# These ask their own questions about the engraver, or none.
+UNPREPARED = ("info", "web")
 
 
 def main(argv=None):
@@ -458,6 +419,12 @@ def main(argv=None):
         help="cycle: pull a piece from A1 round the corners nonstop; Enter pauses and resumes",
     )
     p.add_argument("--speed", type=float, default=50, help="cycle speed in mm/s (default 50)")
+    p = sub.add_parser("web", help="play from a web page in the browser")
+    p.add_argument("--port", type=int, default=8000)
+    p.add_argument(
+        "--host", default="127.0.0.1",
+        help="address to listen on; 0.0.0.0 lets other devices on the network use the page",
+    )
 
     args = parser.parse_args(argv)
     cfg = config_file.load()
@@ -467,7 +434,7 @@ def main(argv=None):
         print(e)
         return 1
     try:
-        if args.command != "info" and not prepare(cfg, machine):
+        if args.command not in UNPREPARED and not prepare(cfg, machine):
             return 1
         COMMANDS[args.command](cfg, machine, args)
     except KeyboardInterrupt:

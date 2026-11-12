@@ -15,6 +15,31 @@ python -m pytest     # run the tests
 Plug the engraver in over USB. With `"port": "auto"` in `config.json` the tool finds it by
 its USB chip; a named port is used when it exists.
 
+## Connecting over WiFi (ESP32 bridge)
+
+With `"link": "wifi"` in `config.json` the laptop talks to the ESP32 DevKitC (plugged in
+on its UART port) instead of the engraver's own USB port, and the ESP32 carries the
+G-code over WiFi:
+
+```
+laptop ──USB──► ESP32 (esp32/main.py, MicroPython) ──WiFi──► engraver
+```
+
+The engraver takes network commands the way its web page sends them: each command is
+an HTTP request to `/command` on port 80, and its replies arrive on a WebSocket on port
+81. The engraver doesn't restart when a session starts this way, so it keeps track of
+the head between sessions. `"link": "usb"` goes back to the cable.
+
+Setting up the ESP32 (inside `nix develop`):
+
+1. Flash MicroPython once (the board has octal flash and PSRAM):
+   `esptool --port <port> erase-flash` then
+   `esptool --port <port> write-flash 0 ESP32_GENERIC_S3-SPIRAM_OCT-<version>.bin`
+   from https://micropython.org/download/ESP32_GENERIC_S3/
+2. Copy `esp32/config.example.json` to `esp32/config.json` and fill in the WiFi and the
+   engraver's address (it is git-ignored).
+3. `./esp32/deploy.sh` copies the bridge and its settings onto the board and restarts it.
+
 ## Commands
 
 Add `--fake` before any command to print the G-code instead of moving the engraver.

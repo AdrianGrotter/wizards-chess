@@ -13,6 +13,8 @@
         default = pkgs.mkShell {
           packages = [
             (pkgs.python3.withPackages (ps: [ ps.chess ps.pyserial ps.pytest ]))
+            pkgs.esptool
+            pkgs.mpremote
           ];
         };
       });

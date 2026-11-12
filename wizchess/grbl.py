@@ -5,8 +5,13 @@ from serial.tools import list_ports
 
 from .machine import MOTION_TIMEOUT, GcodeMachine, MachineError
 
-# USB vendor and product id of the WCH CH340 serial chip on the MKS DLC32 board.
-ENGRAVER_USB_IDS = {(0x1A86, 0x7523)}
+# USB vendor and product ids of the serial chips the engraver can be reached through:
+# the WCH CH340 on the MKS DLC32 board itself, or the Silicon Labs CP2102N on the
+# ESP32 DevKitC running the WiFi bridge (esp32/main.py).
+USB_IDS = {
+    "usb": {(0x1A86, 0x7523)},
+    "wifi": {(0x10C4, 0xEA60)},
+}
 
 ALARMS = {
     "1": "a limit switch was hit",
@@ -30,26 +35,34 @@ def alarm_message(text):
     )
 
 
-def find_port(configured):
-    """The engraver's serial device: the configured one if present, else found by USB id."""
+def find_port(configured, link="usb"):
+    """The serial device to talk G-code on: the configured one if present, else found by USB id.
+
+    link "usb" is the engraver's own USB port; "wifi" is the ESP32 bridge.
+    """
     ports = list(list_ports.comports())
     if configured and configured != "auto" and any(p.device == configured for p in ports):
         return configured
     for port in ports:
-        if (port.vid, port.pid) in ENGRAVER_USB_IDS:
+        if (port.vid, port.pid) in USB_IDS[link]:
             return port.device
+    if link == "wifi":
+        raise GrblError("No ESP32 WiFi bridge found on USB. Is it plugged in (UART port)?")
     raise GrblError("No engraver found on USB. Is it plugged in and switched on?")
 
 
 class GrblMachine(GcodeMachine):
     """Drives a GRBL engraver over a USB serial port."""
 
-    def __init__(self, port, baud, travel_mm, magnet_power, homing_switches=False, timeout=10.0):
+    def __init__(
+        self, port, baud, travel_mm, magnet_power, homing_switches=False, timeout=10.0, link="usb"
+    ):
         super().__init__(travel_mm, magnet_power, homing_switches)
         self.timeout = timeout
         self.out_of_step = False
+        self.link = link
         self.serial = serial.Serial()
-        self.serial.port = find_port(port)
+        self.serial.port = find_port(port, link)
         self.serial.baudrate = baud
         self.serial.timeout = 0.1
         self.serial.dtr = False
@@ -61,7 +74,9 @@ class GrblMachine(GcodeMachine):
                 "Can't open %s (%s). Close LightBurn, LaserGRBL or any other program using the engraver."
                 % (self.serial.port, e)
             )
-        self._wait_until_ready()
+        # Over WiFi the ESP32 restarts when its port opens and must rejoin the
+        # network and the engraver before anything answers.
+        self._wait_until_ready(seconds=40 if link == "wifi" else 15)
         self.setup()
         self.head = self.position()
 
@@ -96,6 +111,11 @@ class GrblMachine(GcodeMachine):
                 if self._readline().startswith(b"<"):
                     self._drain(1.0)
                     return
+        if self.link == "wifi":
+            raise GrblError(
+                "The engraver did not answer through the ESP32 bridge on %s. Check that the "
+                "ESP32 can join the WiFi and reach the engraver (esp32/config.json)." % self.serial.port
+            )
         raise GrblError("The engraver did not answer on %s." % self.serial.port)
 
     def _read_line(self, deadline, waiting_for):

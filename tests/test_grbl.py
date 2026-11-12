@@ -35,3 +35,18 @@ def test_alarm_messages():
     assert "limit switch" in alarm_message("ALARM:1")
     assert "position is lost" in alarm_message("ALARM:3")
     assert "alarm code 42" in alarm_message("ALARM:42")
+
+
+BRIDGE = dict(device="/dev/cu.usbserial-2110", vid=0x10C4, pid=0xEA60)
+
+
+def test_wifi_link_finds_the_esp32_bridge_not_the_engraver(monkeypatch):
+    ports(monkeypatch, ENGRAVER, BRIDGE)
+    assert find_port("auto", "wifi") == "/dev/cu.usbserial-2110"
+    assert find_port("auto", "usb") == "/dev/cu.usbserial-9"
+
+
+def test_missing_bridge_has_a_clear_message(monkeypatch):
+    ports(monkeypatch, ENGRAVER)
+    with pytest.raises(GrblError, match="No ESP32 WiFi bridge"):
+        find_port("auto", "wifi")

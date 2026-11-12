@@ -1,4 +1,5 @@
 {
+  "link": "wifi",
   "port": "auto",
   "baud": 115200,
   "travel_mm": [

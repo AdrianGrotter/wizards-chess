@@ -51,7 +51,7 @@ def make_machine(cfg, fake):
         return FakeMachine(**common)
     from .grbl import GrblMachine
 
-    return GrblMachine(cfg.get("port", "auto"), cfg["baud"], **common)
+    return GrblMachine(cfg.get("port", "auto"), cfg["baud"], link=cfg.get("link", "usb"), **common)
 
 
 def make_mover(cfg, machine):
@@ -113,7 +113,7 @@ def cmd_info(cfg, machine, args):
     if isinstance(machine, FakeMachine):
         print("Fake machine: nothing to read.")
         return
-    print("Port          %s" % machine.serial.port)
+    print("Port          %s (%s)" % (machine.serial.port, "ESP32 WiFi bridge" if machine.link == "wifi" else "engraver USB"))
     for line in machine.info():
         print(line)
     s = machine.settings()

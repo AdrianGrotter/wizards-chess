@@ -113,8 +113,9 @@ def new_game():
         ("e7", "e5", "White's turn"),
         ("g1", "g3", "knight can't move"),
         ("e2", "e5", "pawn can't move"),
-        ("a1", "a3", "rook can't move"),
-        ("c1", "e3", "bishop can't move"),
+        ("a1", "a3", "The rook on A1 is blocked by your pawn on A2."),
+        ("c1", "e3", "The bishop on C1 is blocked by your pawn on D2."),
+        ("d1", "d5", "The queen on D1 is blocked by your pawn on D2."),
         ("e1", "g1", "occupied by your own knight"),
         ("a1", "a2", "occupied by your own pawn"),
     ],
@@ -150,3 +151,34 @@ def test_castling_by_moving_the_king_two_squares():
         game.play(m)
     game.play_move(game.move_between("e1", "g1"))
     assert game.board.piece_at(chess.F1).symbol() == "R"
+
+
+def test_blocked_by_the_other_side():
+    game = new_game()
+    for m in ["e4", "e5"]:
+        game.play(m)
+    with pytest.raises(ValueError, match="A pawn can't capture straight ahead: E5 is held by Black's pawn."):
+        game.move_between("e4", "e5")
+
+
+def test_pawn_double_step_blocked():
+    game = new_game()
+    for m in ["Nf3", "e6", "Ne5", "a6", "Ng4", "Bc5", "Ne3", "a5"]:
+        game.play(m)
+    with pytest.raises(ValueError, match="The pawn on E2 is blocked by your knight on E3."):
+        game.move_between("e2", "e4")
+
+
+def test_castling_blocked_by_a_piece_in_between():
+    game = new_game()
+    for m in ["e4", "e5", "Nf3", "Nc6"]:
+        game.play(m)
+    with pytest.raises(ValueError, match="The king on E1 is blocked by your bishop on F1."):
+        game.move_between("e1", "g1")
+
+
+def test_rook_blocked_further_along():
+    game = new_game()
+    game.board.set_fen("4k3/8/8/p7/8/8/8/R3K3 w - - 0 1")
+    with pytest.raises(ValueError, match="The rook on A1 is blocked by Black's pawn on A5."):
+        game.move_between("a1", "a8")

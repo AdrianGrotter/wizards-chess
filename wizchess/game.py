@@ -113,10 +113,61 @@ class Game:
             if self.board.is_castling(move):
                 raise ValueError("%s can't castle out of, through or into check." % side)
             raise ValueError("That would leave the %s king in check." % side.lower())
+        reason = self._blocked_reason(piece, from_square, to_square)
+        if reason:
+            raise ValueError(reason)
         raise ValueError(
             "A %s can't move from %s to %s."
             % (chess.piece_name(piece.piece_type), start.upper(), end.upper())
         )
+
+    def _owner(self, piece, mover):
+        if piece.color == mover.color:
+            return "your"
+        return "White's" if piece.color == chess.WHITE else "Black's"
+
+    def _blocked_reason(self, piece, from_square, to_square):
+        """Why a move the piece could otherwise make is stopped by another piece, if it is."""
+        df = chess.square_file(to_square) - chess.square_file(from_square)
+        dr = chess.square_rank(to_square) - chess.square_rank(from_square)
+        straight = df == 0 or dr == 0
+        diagonal = abs(df) == abs(dr)
+        forward = 1 if piece.color == chess.WHITE else -1
+        start_rank = 1 if piece.color == chess.WHITE else 6
+        kind = piece.piece_type
+        follows_pattern = (
+            (kind == chess.ROOK and straight)
+            or (kind == chess.BISHOP and diagonal)
+            or (kind == chess.QUEEN and (straight or diagonal))
+            or (kind == chess.PAWN and df == 0 and (dr == forward or (
+                dr == 2 * forward and chess.square_rank(from_square) == start_rank)))
+            or (kind == chess.KING and dr == 0 and abs(df) == 2)
+        )
+        if not follows_pattern:
+            return None
+        between = sorted(
+            chess.SquareSet(chess.between(from_square, to_square)),
+            key=lambda sq: chess.square_distance(sq, from_square),
+        )
+        name = chess.piece_name(kind)
+        for square in between:
+            blocker = self.board.piece_at(square)
+            if blocker:
+                return "The %s on %s is blocked by %s %s on %s." % (
+                    name,
+                    chess.square_name(from_square).upper(),
+                    self._owner(blocker, piece),
+                    chess.piece_name(blocker.piece_type),
+                    chess.square_name(square).upper(),
+                )
+        target = self.board.piece_at(to_square)
+        if kind == chess.PAWN and target:
+            return "A pawn can't capture straight ahead: %s is held by %s %s." % (
+                chess.square_name(to_square).upper(),
+                self._owner(target, piece),
+                chess.piece_name(target.piece_type),
+            )
+        return None
 
     def play(self, text):
         """Carry out a typed move (e2e4 or Nf3) on the physical board. Returns notes for the players."""

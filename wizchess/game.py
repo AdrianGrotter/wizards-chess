@@ -81,9 +81,42 @@ class Game:
         except ValueError:
             raise ValueError("Not a legal move here: %r" % text)
 
+    def move_between(self, start, end, promotion=None):
+        """The legal move from square start to square end, or ValueError saying why not.
+
+        A pawn reaching the last rank becomes a queen unless promotion names
+        another piece ("q", "r", "b" or "n").
+        """
+        from_square, to_square = chess.parse_square(start), chess.parse_square(end)
+        piece = self.board.piece_at(from_square)
+        side = "White" if self.board.turn == chess.WHITE else "Black"
+        if piece is None:
+            raise ValueError("There is no piece on %s." % start.upper())
+        if piece.color != self.board.turn:
+            raise ValueError("It's %s's turn." % side)
+        promotion_type = None
+        if piece.piece_type == chess.PAWN and chess.square_rank(to_square) in (0, 7):
+            promotion_type = chess.Piece.from_symbol(promotion or "q").piece_type
+        elif promotion:
+            raise ValueError("Only a pawn reaching the last rank can be promoted.")
+        move = chess.Move(from_square, to_square, promotion=promotion_type)
+        if move in self.board.legal_moves:
+            return move
+        if self.board.is_pseudo_legal(move):
+            if self.board.is_castling(move):
+                raise ValueError("%s can't castle out of, through or into check." % side)
+            raise ValueError("That would leave the %s king in check." % side.lower())
+        raise ValueError(
+            "A %s can't move from %s to %s."
+            % (chess.piece_name(piece.piece_type), start.upper(), end.upper())
+        )
+
     def play(self, text):
-        """Carry out a move on the physical board. Returns notes for the players."""
-        move = self.parse(text)
+        """Carry out a typed move (e2e4 or Nf3) on the physical board. Returns notes for the players."""
+        return self.play_move(self.parse(text))
+
+    def play_move(self, move):
+        """Carry out a legal move on the physical board. Returns notes for the players."""
         captured = captured_square(self.board, move)
         if captured is not None and self.graveyard is None and self.remove_by_hand:
             self.remove_by_hand(chess.square_name(captured))

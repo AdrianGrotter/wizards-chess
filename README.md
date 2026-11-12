@@ -20,7 +20,7 @@ Add `--fake` before any command to print the G-code instead of moving the engrav
 
 ```sh
 python -m wizchess info            # engraver info and the settings that matter
-python -m wizchess grid            # interactive grid: type A4 -> C2 to drag a piece
+python -m wizchess grid            # interactive grid: type A4 -> C2, chess rules enforced
 python -m wizchess jog             # interactive: move the head, drag pieces, calibrate
 python -m wizchess play            # play a game by typing moves (e2e4 or Nf3)
 python -m wizchess goto e4         # head under e4, magnet off

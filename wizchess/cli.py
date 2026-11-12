@@ -1,9 +1,11 @@
 import argparse
 
+import chess
+
 from . import config as config_file
 from .game import Game, Graveyard
 from .geometry import Geometry, parse_square
-from .grid import GRID_HELP, needs_edges, parse_command, render, starting_position
+from .grid import GRID_HELP, parse_command, render
 from .machine import FakeMachine, MachineError
 from .mover import Mover, Step
 
@@ -70,17 +72,21 @@ def cmd_home(cfg, machine, args):
     machine.home()
 
 
-def cmd_play(cfg, machine, args):
+def make_game(cfg, machine):
     columns = cfg.get("graveyard_columns")
 
     def remove_by_hand(square):
-        input("Take the captured piece off %s, then press Enter." % square)
+        input("Take the captured piece off %s by hand, then press Enter." % square.upper())
 
-    game = Game(
+    return Game(
         make_mover(cfg, machine),
         Graveyard(columns) if columns else None,
         remove_by_hand=remove_by_hand,
     )
+
+
+def cmd_play(cfg, machine, args):
+    game = make_game(cfg, machine)
     print("Type moves like e2e4 or Nf3. 'board' shows the board, 'quit' leaves.")
     while not game.board.is_game_over():
         side = "White" if game.board.turn else "Black"
@@ -99,15 +105,19 @@ def cmd_play(cfg, machine, args):
             print(e)
 
 
+def grid_pieces(board):
+    return {chess.square_name(sq): piece.symbol() for sq, piece in board.piece_map().items()}
+
+
 def cmd_grid(cfg, machine, args):
-    mover = make_mover(cfg, machine)
-    pieces = starting_position()
+    game = make_game(cfg, machine)
     head = came_from = None
-    print(render(pieces))
+    print(render(grid_pieces(game.board)))
     print(GRID_HELP)
     while True:
+        side = "White" if game.board.turn == chess.WHITE else "Black"
         try:
-            command = parse_command(input("grid> "))
+            command = parse_command(input("%s> " % side))
         except ValueError as e:
             print(e)
             continue
@@ -119,30 +129,28 @@ def cmd_grid(cfg, machine, args):
                 print(GRID_HELP)
                 continue
             if kind == "reset":
-                pieces, came_from = starting_position(), None
+                game.board.reset()
+                came_from = None
             elif kind == "clear":
-                pieces, came_from = {}, None
+                game.board.clear()
+                came_from = None
             elif kind == "put":
-                pieces[command[1]] = command[2]
+                game.board.set_piece_at(chess.parse_square(command[1]), chess.Piece.from_symbol(command[2]))
             elif kind == "remove":
-                pieces.pop(command[1], None)
+                game.board.remove_piece_at(chess.parse_square(command[1]))
             elif kind == "goto":
-                mover.goto(parse_square(command[1]))
+                game.mover.goto(parse_square(command[1]))
                 machine.wait_until_idle()
                 head = command[1]
             elif kind == "move":
-                _, start, end, force_edges = command
-                if start not in pieces:
-                    print("There is no piece on %s. Use 'put' if the grid is out of date." % start.upper())
-                    continue
-                if end in pieces:
-                    input("Take the %s off %s by hand, then press Enter." % (pieces[end], end.upper()))
-                    del pieces[end]
-                via_edges = force_edges or needs_edges(pieces, start, end)
-                mover.run(Step(parse_square(start), parse_square(end), via_edges))
-                pieces[end] = pieces.pop(start)
+                _, start, end, promotion = command
+                notes = game.play_move(game.move_between(start, end, promotion))
                 head, came_from = end, start
-            print(render(pieces, head, came_from))
+                print(render(grid_pieces(game.board), head, came_from))
+                for note in notes:
+                    print(note)
+                continue
+            print(render(grid_pieces(game.board), head, came_from))
         except (ValueError, MachineError) as e:
             print(e)
 

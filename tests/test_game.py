@@ -99,3 +99,53 @@ def test_game_asks_for_the_captured_piece_before_moving():
     lines_before_capture = len(machine.lines)
     game.play("exd5")
     assert removed == [("d5", lines_before_capture)]
+
+
+def new_game():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    return Game(Mover(machine, Geometry((31, 31), (269, 269)), 3000, 1500), remove_by_hand=lambda sq: None)
+
+
+@pytest.mark.parametrize(
+    "start, end, reason",
+    [
+        ("e4", "e5", "no piece on E4"),
+        ("e7", "e5", "White's turn"),
+        ("g1", "g3", "knight can't move"),
+        ("e2", "e5", "pawn can't move"),
+        ("a1", "a3", "rook can't move"),
+        ("c1", "e3", "bishop can't move"),
+        ("e1", "g1", "king can't move"),
+    ],
+)
+def test_illegal_moves_say_why(start, end, reason):
+    with pytest.raises(ValueError, match="(?i)" + reason):
+        new_game().move_between(start, end)
+
+
+def test_pinned_piece_cannot_expose_the_king():
+    game = new_game()
+    for m in ["e4", "e5", "d3", "Bb4"]:
+        game.play(m)
+    with pytest.raises(ValueError, match="check"):
+        game.move_between("a2", "a3")
+
+
+def test_pawn_promotes_to_queen_unless_told_otherwise():
+    game = new_game()
+    game.board.set_fen("8/4P3/8/8/8/8/k7/4K3 w - - 0 1")
+    assert game.move_between("e7", "e8").promotion == chess.QUEEN
+    assert game.move_between("e7", "e8", "n").promotion == chess.KNIGHT
+
+
+def test_only_promoting_pawns_take_a_promotion_piece():
+    with pytest.raises(ValueError, match="promoted"):
+        new_game().move_between("e2", "e4", "q")
+
+
+def test_castling_by_moving_the_king_two_squares():
+    game = new_game()
+    for m in ["e4", "e5", "Nf3", "Nc6", "Bc4", "Nf6"]:
+        game.play(m)
+    game.play_move(game.move_between("e1", "g1"))
+    assert game.board.piece_at(chess.F1).symbol() == "R"

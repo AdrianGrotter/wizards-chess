@@ -48,3 +48,20 @@ def test_ctrl_d_at_a_prompt_quits():
             del cli.input
         else:
             cli.input = original
+
+
+def test_outline_circles_the_corners_until_quit(monkeypatch):
+    answers = iter(["", "", "", "", "quit"])
+    monkeypatch.setattr(cli, "ask", lambda prompt: next(answers))
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    cfg = {"board": {"a1": [31, 41], "h1": [269, 41], "a8": [31, 279]}, "travel_feed": 3000, "drag_feed": 1500}
+    cli.cmd_outline(cfg, machine, None)
+    corners = [line for line in machine.lines if line.endswith("F3000")][:5]
+    assert corners == [
+        "G53 G1 X31.00 Y41.00 F3000",
+        "G53 G1 X31.00 Y279.00 F3000",
+        "G53 G1 X269.00 Y279.00 F3000",
+        "G53 G1 X269.00 Y41.00 F3000",
+        "G53 G1 X31.00 Y41.00 F3000",
+    ]
+    assert machine.lines[-1] == "G53 G1 X0.00 Y0.00 F3000"

@@ -251,6 +251,27 @@ def cmd_grid(cfg, machine, args):
     finish(game.mover)
 
 
+OUTLINE_CORNERS = ("a1", "a8", "h8", "h1")
+
+
+def cmd_outline(cfg, machine, args):
+    """Visit the corner squares in a circle, one per Enter, to check the board lines up."""
+    mover = make_mover(cfg, machine)
+    print("The head visits A1, A8, H8 and H1 in turn. Press Enter for the next corner, type 'quit' to stop.")
+    i = 0
+    while True:
+        name = OUTLINE_CORNERS[i % len(OUTLINE_CORNERS)]
+        x, y = mover.geometry.square_mm(name)
+        machine.move_to(x, y, cfg["travel_feed"])
+        machine.wait_until_idle()
+        following = OUTLINE_CORNERS[(i + 1) % len(OUTLINE_CORNERS)]
+        answer = ask("At %s (%.1f, %.1f mm). Enter for %s, or 'quit': " % (name.upper(), x, y, following.upper()))
+        if answer.strip().lower() in ("quit", "q", "exit"):
+            break
+        i += 1
+    finish(mover)
+
+
 def _numbers(values, count, usage):
     if len(values) != count:
         raise ValueError(usage)
@@ -329,6 +350,7 @@ COMMANDS = {
     "play": cmd_play,
     "grid": cmd_grid,
     "jog": cmd_jog,
+    "outline": cmd_outline,
 }
 
 
@@ -348,6 +370,7 @@ def main(argv=None):
     sub.add_parser("play", help="play a game by typing moves")
     sub.add_parser("grid", help="interactive grid: type A4 C2 to move a piece, chess rules enforced")
     sub.add_parser("jog", help="interactive session: move the head, drag pieces, save calibration points")
+    sub.add_parser("outline", help="visit the corner squares A1, A8, H8, H1 in a circle, one per Enter")
 
     args = parser.parse_args(argv)
     cfg = config_file.load()

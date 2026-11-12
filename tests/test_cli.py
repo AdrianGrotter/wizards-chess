@@ -65,3 +65,52 @@ def test_outline_circles_the_corners_until_quit(monkeypatch):
         "G53 G1 X31.00 Y41.00 F3000",
     ]
     assert machine.lines[-1] == "G53 G1 X0.00 Y0.00 F3000"
+
+
+class Presses:
+    """Stands in for the Enter queue: answers waits from a script, and reports
+    a press 'during' the leg that ends at the given move count."""
+
+    def __init__(self, waits, press_after_moves):
+        self.waits = list(waits)
+        self.press_after_moves = dict(press_after_moves)
+        self.machine = None
+
+    def _moves(self):
+        return sum(1 for line in self.machine.lines if line.endswith("F3000") and "G53" in line)
+
+    def empty(self):
+        return self._moves() not in self.press_after_moves
+
+    def get(self):
+        moves = self._moves()
+        if moves in self.press_after_moves:
+            return self.press_after_moves.pop(moves)
+        return self.waits.pop(0)
+
+
+def test_cycle_pulls_round_the_corners_and_pauses_on_enter():
+    from wizchess.geometry import Geometry
+    from wizchess.mover import Mover
+
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    machine.head = None
+    mover = Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 6000, 6000)
+    said = []
+    # Start, Enter during the 5th leg (pause at A8), Enter to carry on, 'quit' during the 7th leg.
+    presses = Presses(waits=["", ""], press_after_moves={5: "", 7: "quit"})
+    presses.machine = machine
+    cli.cycle_corners(machine, mover, 3000, presses, said.append)
+    drags = [line for line in machine.lines if line.endswith("F3000")]
+    assert drags == [
+        "G53 G1 X31.00 Y279.00 F3000",
+        "G53 G1 X269.00 Y279.00 F3000",
+        "G53 G1 X269.00 Y41.00 F3000",
+        "G53 G1 X31.00 Y41.00 F3000",
+        "G53 G1 X31.00 Y279.00 F3000",
+        "G53 G1 X269.00 Y279.00 F3000",
+        "G53 G1 X269.00 Y41.00 F3000",
+    ]
+    assert any("Paused at A8" in s for s in said)
+    assert machine.lines.index("M3 S1000") < machine.lines.index(drags[0])
+    assert machine.lines[-2] == "M5"

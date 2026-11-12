@@ -24,6 +24,7 @@ python -m wizchess info            # engraver info and the settings that matter
 python -m wizchess grid            # interactive grid: type A4 C2, chess rules enforced
 python -m wizchess jog             # interactive: move the head, drag pieces, calibrate
 python -m wizchess outline         # head visits A1, A8, H8, H1 in a circle, one per Enter
+python -m wizchess outline cycle   # pulls a piece from A1 round the corners at 50 mm/s
 python -m wizchess play            # play a game by typing moves (e2e4 or Nf3)
 python -m wizchess goto e4         # head under e4, then back to its corner
 python -m wizchess move e2 e4      # drag a piece, no rules (--edges: travel between squares)
@@ -103,6 +104,8 @@ When two pieces are on each other's squares, one steps aside to a free square fi
 3. Do the same for h1 and a8 (`save h1`, `save a8`).
 
 Check the result with `outline`, which visits the four corner squares in turn.
+`outline cycle` pulls a piece from A1 round the corners nonstop (`--speed` in mm/s,
+default 50): Enter pauses at the next corner, Enter again carries on, `quit` stops there.
 Every other square is worked out from those three points, so a board that sits
 slightly rotated is still hit dead centre.
 

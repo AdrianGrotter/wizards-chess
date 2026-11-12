@@ -1,5 +1,7 @@
 import argparse
+import queue
 import sys
+import threading
 
 import chess
 
@@ -273,9 +275,70 @@ def cmd_grid(cfg, machine, args):
 OUTLINE_CORNERS = ("a1", "a8", "h8", "h1")
 
 
+def _is_quit(text):
+    return text.strip().lower() in ("quit", "q", "exit")
+
+
+def cycle_corners(machine, mover, feed, presses, say):
+    """Drag a piece round and round the corner squares, starting from A1.
+
+    presses delivers one item per Enter the player presses, with what they
+    typed. Enter while the piece is moving pauses it at the next corner;
+    Enter while paused carries on; 'quit' stops at the next corner.
+    """
+    mover.goto((0, 0))
+    machine.wait_until_idle()
+    say("The head is under A1. Put a piece there, then press Enter to start (or type 'quit').")
+    if _is_quit(presses.get()):
+        return
+    say("Pulling the piece round the corners. Enter pauses at the next corner, 'quit' stops there.")
+    machine.magnet(True)
+    try:
+        machine.dwell(mover.grab_seconds)
+        i = 0
+        while True:
+            i += 1
+            name = OUTLINE_CORNERS[i % len(OUTLINE_CORNERS)]
+            x, y = mover.geometry.square_mm(name)
+            machine.move_to(x, y, feed)
+            machine.wait_until_idle()
+            if presses.empty():
+                continue
+            if _is_quit(presses.get()):
+                break
+            while not presses.empty():
+                presses.get()
+            say("Paused at %s. Press Enter to carry on, or type 'quit'." % name.upper())
+            if _is_quit(presses.get()):
+                break
+    finally:
+        machine.magnet(False)
+    machine.dwell(mover.grab_seconds)
+
+
+def _enter_presses():
+    """A queue that gets one item per line typed, filled from a background thread."""
+    presses = queue.Queue()
+
+    def read():
+        while True:
+            try:
+                presses.put(input())
+            except (EOFError, KeyboardInterrupt):
+                presses.put("quit")
+                return
+
+    threading.Thread(target=read, daemon=True).start()
+    return presses
+
+
 def cmd_outline(cfg, machine, args):
     """Visit the corner squares in a circle, one per Enter, to check the board lines up."""
     mover = make_mover(cfg, machine)
+    if getattr(args, "mode", None) == "cycle":
+        cycle_corners(machine, mover, args.speed * 60, _enter_presses(), print)
+        finish(mover)
+        return
     print("The head visits A1, A8, H8 and H1 in turn. Press Enter for the next corner, type 'quit' to stop.")
     i = 0
     while True:
@@ -389,7 +452,12 @@ def main(argv=None):
     sub.add_parser("play", help="play a game by typing moves")
     sub.add_parser("grid", help="interactive grid: type A4 C2 to move a piece, chess rules enforced")
     sub.add_parser("jog", help="interactive session: move the head, drag pieces, save calibration points")
-    sub.add_parser("outline", help="visit the corner squares A1, A8, H8, H1 in a circle, one per Enter")
+    p = sub.add_parser("outline", help="visit the corner squares A1, A8, H8, H1 in a circle, one per Enter")
+    p.add_argument(
+        "mode", nargs="?", choices=["cycle"],
+        help="cycle: pull a piece from A1 round the corners nonstop; Enter pauses and resumes",
+    )
+    p.add_argument("--speed", type=float, default=50, help="cycle speed in mm/s (default 50)")
 
     args = parser.parse_args(argv)
     cfg = config_file.load()

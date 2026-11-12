@@ -1,15 +1,27 @@
 {
-  "port": "/dev/cu.usbserial-2140",
+  "port": "auto",
   "baud": 115200,
-  "travel_mm": [300, 300],
+  "travel_mm": [
+    300,
+    300
+  ],
   "magnet_power": 1000,
   "homing_switches": false,
   "travel_feed": 4000,
   "drag_feed": 2000,
   "board": {
-    "a1": [31, 31],
-    "h8": [269, 269],
-    "files_along": "x"
+    "a1": [
+      31,
+      31
+    ],
+    "h1": [
+      269,
+      31
+    ],
+    "a8": [
+      31,
+      269
+    ]
   },
   "graveyard_columns": null
 }

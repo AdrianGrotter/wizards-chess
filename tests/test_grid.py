@@ -60,3 +60,10 @@ def test_render_shows_pieces_head_and_origin():
     assert lines[1] == " 8   r   .   .   .   k   .   .   .   8"
     assert lines[5] == " 4   .   .   .   .  [P]  .   .   .   4"
     assert lines[7] == " 2   P   .   .   .   o   .   .   .   2"
+
+
+def test_turn_and_unlock():
+    assert parse_command("turn Black") == ("turn", "black")
+    assert parse_command("unlock") == ("unlock",)
+    with pytest.raises(ValueError, match="Use turn with white or black"):
+        parse_command("turn red")

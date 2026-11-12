@@ -8,11 +8,13 @@ GRID_HELP = """\
   A4              move the head under A4, magnet off
   put E4 N        place a piece on the grid (white: KQRBNP, black: kqrbnp)
   remove E4       take a piece off the grid
+  turn black      set whose turn it is (after fixing the grid by hand)
   reset           new game: starting position, head back to its corner
   clear           empty grid (head stays where it is)
   park            head back to its corner, magnet off
+  unlock          clear an engraver alarm
   grid            show the grid
-  quit            leave
+  quit            send the head back to its corner and leave
 Moves follow the chess rules and alternate between White and Black.
 Pieces: upper case white, lower case black. [ ] is the head, o where the last piece came from."""
 
@@ -20,8 +22,8 @@ WORDS = {
     "quit": "quit", "exit": "quit", "q": "quit",
     "grid": "grid", "show": "grid",
     "help": "help", "?": "help", "h": "help",
-    "reset": "reset", "clear": "clear", "park": "park",
-    "put": "put", "remove": "remove", "del": "remove",
+    "reset": "reset", "clear": "clear", "park": "park", "unlock": "unlock",
+    "put": "put", "remove": "remove", "del": "remove", "turn": "turn",
 }
 EXAMPLES = "Type a square (E4), a move (E2 E4), or 'help' for all commands."
 
@@ -58,7 +60,8 @@ def parse_command(text):
     """Turn a typed line into a command tuple, or ValueError with a message for the player.
 
     ("move", start, end, promotion or None), ("goto", sq), ("put", sq, piece),
-    ("remove", sq), ("reset",), ("clear",), ("park",), ("grid",), ("help",), ("quit",)
+    ("remove", sq), ("turn", "white"|"black"), ("reset",), ("clear",), ("park",),
+    ("unlock",), ("grid",), ("help",), ("quit",)
     Squares are returned in lower case; a put piece keeps its case (colour).
     """
     tokens = _tokens(text)
@@ -75,6 +78,10 @@ def parse_command(text):
                 "'%s' is not a piece. Use K Q R B N P for white, k q r b n p for black." % piece
             )
         return ("put", square(tokens[1]), piece)
+    if word == "turn":
+        if len(tokens) != 2 or tokens[1].lower() not in ("white", "black"):
+            raise ValueError("Use turn with white or black, like: turn black")
+        return ("turn", tokens[1].lower())
     if word == "remove":
         if len(tokens) != 2:
             raise ValueError("Use remove with one square, like: remove E4")

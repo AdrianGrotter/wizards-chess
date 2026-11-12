@@ -12,7 +12,8 @@ nix develop          # or `direnv allow` once, if you use direnv
 python -m pytest     # run the tests
 ```
 
-Plug the engraver in over USB. The port is set in `config.json` (`/dev/cu.usbserial-2140`).
+Plug the engraver in over USB. With `"port": "auto"` in `config.json` the tool finds it by
+its USB chip; a named port is used when it exists.
 
 ## Commands
 
@@ -23,50 +24,69 @@ python -m wizchess info            # engraver info and the settings that matter
 python -m wizchess grid            # interactive grid: type A4 C2, chess rules enforced
 python -m wizchess jog             # interactive: move the head, drag pieces, calibrate
 python -m wizchess play            # play a game by typing moves (e2e4 or Nf3)
-python -m wizchess goto e4         # head under e4, magnet off
+python -m wizchess goto e4         # head under e4, then back to its corner
 python -m wizchess move e2 e4      # drag a piece, no rules (--edges: travel between squares)
 python -m wizchess home            # $H, once homing switches are installed
 ```
 
-## Zero position
+## Starting and stopping
 
-The board restarts every time the computer connects, and it treats wherever the head
-is at that moment as (0, 0). Until the homing switches are installed:
+The board restarts every time the computer connects, and counts every position from
+wherever the head is at that moment. Every command that moves the head therefore
+starts by asking whether the head is pushed into its corner, and every session ends by
+parking the head there again (`quit`, Ctrl-D or Ctrl-C at a prompt).
 
-1. Push the head by hand into the corner it should count from, before connecting.
-2. Do a whole session in one command (`jog` or `play`). Every new command reconnects
-   and resets (0, 0).
+Before that question, the tool offers to fix engraver settings that make pieces slip
+or drop: laser mode (`$32`) and high acceleration (`$120`/`$121`).
 
-Once the switches are in, set `$22=1` on the engraver and `"homing_switches": true` in
-`config.json`, and start each session with homing.
+Ctrl-C while the head is moving halts the engraver at once, including moves it had
+already queued. Its position is lost after that, so push the head back into its corner
+before the next run.
+
+Once homing switches are installed, set `$22=1` on the engraver and
+`"homing_switches": true` in `config.json`; sessions then home instead of asking.
+
+## When something goes wrong
+
+- A move is checked from start to end (board edges, machine reach) before anything
+  moves, so a refused move never starts.
+- If the engraver fails partway through a move, the tool lists which drags happened.
+  The grid keeps the position from before the move: put the pieces back, or use
+  `put` and `remove` to match the real board.
+- An engraver alarm (for example a limit switch) is reported with its reason; `unlock`
+  clears it.
+- After a reply goes missing, the connection is no longer trusted and every command
+  says to restart the tool.
 
 ## Calibration
 
 1. Run `python -m wizchess jog`.
 2. Move the head under the centre of a1 with `x 10`, `y -5` and so on, then `save a1`.
-3. Do the same for h8 and `save h8`.
+3. Do the same for h1 and a8 (`save h1`, `save a8`).
 
-All other squares are worked out from those two points. If the files (a–h) run along the
-machine's Y axis instead of X, set `"files_along": "y"` in `config.json`.
+Every other square is worked out from those three points, so a board that sits
+slightly rotated is still hit dead centre.
 
 ## Captured pieces
 
 With `"graveyard_columns": null` in `config.json`, `play` asks a player to lift the captured
-piece off its square before the capturing piece moves in.
+piece off its square before the capturing piece moves in. Typing `cancel` there calls the
+move off before anything moves.
 
 ## Engraver settings
 
-`info` warns about these:
+`info` shows these, and moving commands offer to fix them:
 
-- `$32=0`: laser mode off, otherwise the magnet switches off whenever the head stops.
-- `$110`/`$111` and `$120`/`$121`: lower speed and acceleration if pieces slip.
+- `$32=0`: laser mode off, otherwise the magnet may switch off whenever the head stops.
+- `$120`/`$121`: acceleration; above 1000 mm/s² pieces tend to slip.
+- `$110`/`$111`: top speed, if pieces still slip.
 
 ## Layout
 
 | Module | Job | Runs on ESP32 later? |
 |---|---|---|
-| `geometry.py` | square name ↔ millimetres, from the a1/h8 calibration | yes, as is |
-| `mover.py` | plans the magnet path for one piece and drives it | yes, as is |
+| `geometry.py` | square name ↔ millimetres, from the a1/h1/a8 calibration | yes, as is |
+| `mover.py` | plans head and piece paths along the lines between squares | yes, as is |
 | `machine.py` | the engraver as actions (`move_to`, `magnet`, `home`), plus a fake | yes, as is |
 | `grbl.py` | sends those actions over USB serial | replace with UART/WiFi |
 | `game.py` | chess rules (python-chess), captures, castling, en passant | needs a lighter chess library |

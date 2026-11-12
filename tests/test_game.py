@@ -1,7 +1,8 @@
 import chess
 import pytest
 
-from wizchess.game import Game, Graveyard, physical_steps
+from wizchess.game import Game, Graveyard, MoveInterrupted, physical_steps
+from wizchess.machine import MachineError
 from wizchess.geometry import Geometry
 from wizchess.machine import FakeMachine
 from wizchess.mover import Mover, Step
@@ -52,13 +53,13 @@ def test_graveyard_full():
     g = Graveyard({"white": [-1], "black": [8]})
     for _ in range(8):
         g.next_slot("black")
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError, match="No room left"):
         g.next_slot("black")
 
 
 def test_game_accepts_uci_and_san_and_rejects_illegal():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    game = Game(Mover(machine, Geometry((60, 60), (235, 235)), 3000, 1500), Graveyard(COLUMNS))
+    game = Game(Mover(machine, Geometry((60, 60), (235, 60), (60, 235)), 3000, 1500), Graveyard(COLUMNS))
     game.play("e2e4")
     game.play("e5")
     with pytest.raises(ValueError):
@@ -68,7 +69,7 @@ def test_game_accepts_uci_and_san_and_rejects_illegal():
 
 def test_scholars_mate_reports_checkmate():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    game = Game(Mover(machine, Geometry((60, 60), (235, 235)), 3000, 1500), Graveyard(COLUMNS))
+    game = Game(Mover(machine, Geometry((60, 60), (235, 60), (60, 235)), 3000, 1500), Graveyard(COLUMNS))
     notes = []
     for m in ["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7"]:
         notes = game.play(m)
@@ -93,7 +94,7 @@ def test_game_asks_for_the_captured_piece_before_moving():
     def remove_by_hand(square):
         removed.append((square, len(machine.lines)))
 
-    game = Game(Mover(machine, Geometry((31, 31), (269, 269)), 3000, 1500), remove_by_hand=remove_by_hand)
+    game = Game(Mover(machine, Geometry((31, 31), (269, 31), (31, 269)), 3000, 1500), remove_by_hand=remove_by_hand)
     game.play("e4")
     game.play("d5")
     lines_before_capture = len(machine.lines)
@@ -103,7 +104,7 @@ def test_game_asks_for_the_captured_piece_before_moving():
 
 def new_game():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    return Game(Mover(machine, Geometry((31, 31), (269, 269)), 3000, 1500), remove_by_hand=lambda sq: None)
+    return Game(Mover(machine, Geometry((31, 31), (269, 31), (31, 269)), 3000, 1500), remove_by_hand=lambda sq: None)
 
 
 @pytest.mark.parametrize(
@@ -211,3 +212,119 @@ def test_friendly_pieces_cannot_be_taken(setup, start, end, message):
         game.play(m)
     with pytest.raises(ValueError, match=message):
         game.move_between(start, end)
+
+
+class BreaksOnDrag(FakeMachine):
+    """Fails on the nth magnet-on, to simulate the engraver failing mid-move."""
+
+    def __init__(self, fail_on_grab):
+        super().__init__((300, 300), 1000, echo=False)
+        self.fail_on_grab = fail_on_grab
+
+    def magnet(self, on):
+        if on and self.lines.count("M3 S1000") + 1 == self.fail_on_grab:
+            raise MachineError("No reply from the engraver")
+        super().magnet(on)
+
+
+def castling_ready_game(machine):
+    game = Game(Mover(machine, Geometry((31, 31), (269, 31), (31, 269)), 3000, 1500))
+    for m in ["e4", "e5", "Nf3", "Nc6", "Bc4", "Nf6"]:
+        game.play(m)
+    return game
+
+
+def test_interrupted_move_says_what_happened_and_keeps_the_old_position():
+    machine = BreaksOnDrag(fail_on_grab=99)
+    game = castling_ready_game(machine)
+    machine.fail_on_grab = machine.lines.count("M3 S1000") + 2
+    fen_before = game.board.fen()
+    with pytest.raises(MoveInterrupted) as error:
+        game.play_move(game.move_between("e1", "g1"))
+    message = str(error.value)
+    assert "E1 to G1: done" in message
+    assert "H1 to F1: may have stopped partway" in message
+    assert "still shows the position before the move" in message
+    assert game.board.fen() == fen_before
+
+
+def test_interrupted_capture_reminds_about_the_removed_piece():
+    machine = BreaksOnDrag(fail_on_grab=99)
+    game = Game(Mover(machine, Geometry((31, 31), (269, 31), (31, 269)), 3000, 1500), remove_by_hand=lambda sq: True)
+    game.play("e4")
+    game.play("d5")
+    machine.fail_on_grab = machine.lines.count("M3 S1000") + 1
+    with pytest.raises(MoveInterrupted, match="You took the piece off D5"):
+        game.play_move(game.move_between("e4", "d5"))
+
+
+def test_capture_can_be_called_off_before_anything_moves():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    game = Game(Mover(machine, Geometry((31, 31), (269, 31), (31, 269)), 3000, 1500), remove_by_hand=lambda sq: False)
+    game.play("e4")
+    game.play("d5")
+    lines_before = len(machine.lines)
+    with pytest.raises(ValueError, match="called off"):
+        game.play_move(game.move_between("e4", "d5"))
+    assert len(machine.lines) == lines_before
+    assert game.board.piece_at(chess.D5).symbol() == "p"
+
+
+def test_bad_route_is_refused_before_asking_for_the_captured_piece():
+    machine = FakeMachine((100, 100), 1000, echo=False)
+    asked = []
+    game = Game(Mover(machine, Geometry((31, 31), (269, 31), (31, 269)), 3000, 1500), remove_by_hand=asked.append)
+    game.board.set_fen("4k3/7p/8/8/8/8/8/4K2R w - - 0 1")
+    with pytest.raises(ValueError, match="outside the machine"):
+        game.play_move(game.move_between("h1", "h7"))
+    assert asked == []
+
+
+def test_graveyard_slot_is_only_used_when_the_move_happens():
+    machine = BreaksOnDrag(fail_on_grab=1)
+    graveyard = Graveyard({"white": [8], "black": [8]})
+    game = Game(Mover(machine, Geometry((31, 31), (234, 31), (31, 234)), 3000, 1500), graveyard)
+    game.board.set_fen("4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1")
+    with pytest.raises(MoveInterrupted):
+        game.play_move(game.move_between("e4", "d5"))
+    assert graveyard.count == {"white": 0, "black": 0}
+
+
+def test_castling_after_the_king_has_moved_says_so():
+    game = new_game()
+    for m in ["e4", "e5", "Nf3", "Nc6", "Bc4", "Nf6", "Ke2", "Be7", "Ke1", "Bb4"]:
+        game.play(m)
+    with pytest.raises(ValueError, match="White can no longer castle on that side"):
+        game.move_between("e1", "g1")
+
+
+@pytest.mark.parametrize(
+    "edit, problem",
+    [
+        (lambda g: g.remove("e1"), "White has no king"),
+        (lambda g: g.put("d4", "K"), "more than one king"),
+        (lambda g: g.put("d8", "P"), "pawn stands on the first or last row"),
+        (lambda g: g.clear(), "the grid is empty"),
+    ],
+)
+def test_impossible_positions_block_moves_with_a_reason(edit, problem):
+    game = new_game()
+    edit(game)
+    assert any(problem in p for p in game.problems())
+    with pytest.raises(ValueError, match="can't be checked until the grid is a real chess position"):
+        game.move_between("a2", "a3")
+
+
+def test_hand_edits_drop_castling_that_is_no_longer_possible():
+    game = new_game()
+    game.remove("h1")
+    game.put("h3", "R")
+    assert game.problems() == []
+    with pytest.raises(ValueError):
+        game.move_between("e1", "g1")
+
+
+def test_turn_can_be_set_after_editing():
+    game = new_game()
+    game.set_turn("black")
+    assert game.move_between("e7", "e5") == chess.Move.from_uci("e7e5")

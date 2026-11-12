@@ -1,11 +1,12 @@
 import argparse
+import sys
 
 import chess
 
 from . import config as config_file
 from .game import Game, Graveyard
 from .geometry import Geometry, parse_square
-from .grid import GRID_HELP, parse_command, render
+from .grid import GRID_HELP, parse_command, render, square
 from .machine import FakeMachine, MachineError
 from .mover import Mover, Step
 
@@ -16,8 +17,26 @@ JOG_HELP = """\
   move e2 e4    drag a piece from e2 to e4 (add "edges" to go between squares)
   on / off      magnet on / off
   pos           show the head position
-  save a1       store the current position as the centre of a1 (same for h8)
-  quit          leave"""
+  save a1       store the head position as the centre of a1 (also h1 and a8)
+  unlock        clear an engraver alarm
+  quit          send the head back to its corner and leave"""
+
+CALIBRATION_SQUARES = ("a1", "h1", "a8")
+SUGGESTED_ACCELERATION = 500
+HIGH_ACCELERATION = 1000
+
+
+def ask(prompt):
+    """input() that turns Ctrl-D and Ctrl-C at a prompt into 'quit'."""
+    try:
+        return input(prompt)
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return "quit"
+
+
+def confirm(question):
+    return ask(question + " [y/N] ").strip().lower() in ("y", "yes")
 
 
 def make_machine(cfg, fake):
@@ -30,17 +49,69 @@ def make_machine(cfg, fake):
         return FakeMachine(**common)
     from .grbl import GrblMachine
 
-    return GrblMachine(cfg["port"], cfg["baud"], **common)
+    return GrblMachine(cfg.get("port", "auto"), cfg["baud"], **common)
 
 
 def make_mover(cfg, machine):
     return Mover(machine, Geometry.from_config(cfg["board"]), cfg["travel_feed"], cfg["drag_feed"])
 
 
+def prepare(cfg, machine):
+    """Check the engraver's settings and the head's zero before anything moves.
+
+    Returns False when the head isn't in its corner and the session must not start.
+    """
+    if isinstance(machine, FakeMachine):
+        return True
+    settings = machine.settings()
+    if settings.get("32") == "1":
+        print("Laser mode is on ($32=1): the engraver may switch the magnet off whenever the head stops.")
+        if confirm("Turn laser mode off ($32=0)?"):
+            machine.set_setting("32", "0")
+    for key, axis in (("120", "X"), ("121", "Y")):
+        try:
+            value = float(settings.get(key, "0"))
+        except ValueError:
+            continue
+        if value > HIGH_ACCELERATION:
+            print(
+                "%s acceleration is %g mm/s2 ($%s): sharp starts and stops can make pieces slip."
+                % (axis, value, key)
+            )
+            if confirm("Lower it to %d mm/s2?" % SUGGESTED_ACCELERATION):
+                machine.set_setting(key, SUGGESTED_ACCELERATION)
+    if (settings.get("22") == "1") != bool(cfg["homing_switches"]):
+        print("Warning: homing on the engraver ($22) and homing_switches in config.json disagree.")
+    if cfg["homing_switches"]:
+        print("Homing...")
+        machine.home()
+        return True
+    print("The engraver counts every position from where the head is right now.")
+    if confirm("Is the head pushed all the way into its corner?"):
+        return True
+    print("Push the head into its corner by hand, then start again.")
+    return False
+
+
+def finish(mover):
+    """Park the head so the next session starts counting from the corner."""
+    if mover.machine.head is None:
+        print("The head's position is unknown: push it back into its corner before the next run.")
+        return
+    mover.park()
+    print("Head parked in its corner.")
+
+
+def head_square(mover):
+    head = mover.machine.head
+    return None if head is None else mover.geometry.square_at(head)
+
+
 def cmd_info(cfg, machine, args):
     if isinstance(machine, FakeMachine):
         print("Fake machine: nothing to read.")
         return
+    print("Port          %s" % machine.serial.port)
     for line in machine.info():
         print(line)
     s = machine.settings()
@@ -53,19 +124,23 @@ def cmd_info(cfg, machine, args):
     print("Homing        $22 = %s" % s.get("22"))
     print("Head now at   %s" % (machine.position(),))
     if s.get("32") == "1":
-        print("\nWarning: $32=1 switches the magnet off whenever the head stops. Send $32=0.")
+        print("\nWarning: $32=1 may switch the magnet off whenever the head stops.")
     if (s.get("22") == "1") != bool(cfg["homing_switches"]):
         print("\nWarning: $22 and homing_switches in config.json disagree.")
 
 
 def cmd_goto(cfg, machine, args):
-    make_mover(cfg, machine).goto(parse_square(args.square))
+    mover = make_mover(cfg, machine)
+    mover.goto(parse_square(square(args.square)))
     machine.wait_until_idle()
+    ask("The head is under %s. Press Enter to send it back to its corner. " % args.square.upper())
+    finish(mover)
 
 
 def cmd_move(cfg, machine, args):
-    step = Step(parse_square(args.start), parse_square(args.end), via_edges=args.edges)
-    make_mover(cfg, machine).run(step)
+    mover = make_mover(cfg, machine)
+    mover.run(Step(parse_square(square(args.start)), parse_square(square(args.end)), via_edges=args.edges))
+    finish(mover)
 
 
 def cmd_home(cfg, machine, args):
@@ -75,8 +150,11 @@ def cmd_home(cfg, machine, args):
 def make_game(cfg, machine):
     columns = cfg.get("graveyard_columns")
 
-    def remove_by_hand(square):
-        input("Take the captured piece off %s by hand, then press Enter." % square.upper())
+    def remove_by_hand(name):
+        answer = ask(
+            "Take the captured piece off %s by hand, then press Enter (or type 'cancel'). " % name.upper()
+        )
+        return answer.strip().lower() not in ("cancel", "c", "quit")
 
     return Game(
         make_mover(cfg, machine),
@@ -90,9 +168,9 @@ def cmd_play(cfg, machine, args):
     print("Type moves like e2e4 or Nf3. 'board' shows the board, 'quit' leaves.")
     while not game.board.is_game_over():
         side = "White" if game.board.turn else "Black"
-        text = input("%s> " % side).strip()
+        text = ask("%s> " % side).strip()
         if text in ("quit", "exit"):
-            return
+            break
         if text == "board":
             print(game.board)
             continue
@@ -101,8 +179,9 @@ def cmd_play(cfg, machine, args):
         try:
             for note in game.play(text):
                 print(note)
-        except ValueError as e:
+        except (ValueError, MachineError) as e:
             print(e)
+    finish(game.mover)
 
 
 def grid_pieces(board):
@@ -111,100 +190,139 @@ def grid_pieces(board):
 
 def cmd_grid(cfg, machine, args):
     game = make_game(cfg, machine)
-    head = came_from = None
-    print(render(grid_pieces(game.board)))
+    came_from = None
+    print(render(grid_pieces(game.board), head_square(game.mover)))
     print(GRID_HELP)
     while True:
         side = "White" if game.board.turn == chess.WHITE else "Black"
         try:
-            command = parse_command(input("%s> " % side))
+            command = parse_command(ask("%s> " % side))
         except ValueError as e:
             print(e)
             continue
         kind = command[0]
+        notes = []
         try:
             if kind == "quit":
-                return
+                break
             if kind == "help":
                 print(GRID_HELP)
                 continue
             if kind == "reset":
-                game.board.reset()
+                game.reset()
                 game.mover.park()
-                head = came_from = None
-                print("Head is back in its corner. Set the pieces up in the starting position by hand.")
+                came_from = None
+                notes.append("Head is back in its corner. Set the pieces up in the starting position by hand.")
             elif kind == "park":
                 game.mover.park()
-                head = None
+            elif kind == "unlock":
+                machine.unlock()
+                notes.append("Alarm cleared.")
             elif kind == "clear":
-                game.board.clear()
+                game.clear()
                 came_from = None
             elif kind == "put":
-                game.board.set_piece_at(chess.parse_square(command[1]), chess.Piece.from_symbol(command[2]))
+                game.put(command[1], command[2])
             elif kind == "remove":
-                game.board.remove_piece_at(chess.parse_square(command[1]))
+                game.remove(command[1])
+            elif kind == "turn":
+                game.set_turn(command[1])
             elif kind == "goto":
                 game.mover.goto(parse_square(command[1]))
                 machine.wait_until_idle()
-                head = command[1]
             elif kind == "move":
                 _, start, end, promotion = command
                 notes = game.play_move(game.move_between(start, end, promotion))
-                head, came_from = end, start
-                print(render(grid_pieces(game.board), head, came_from))
-                for note in notes:
-                    print(note)
-                continue
-            print(render(grid_pieces(game.board), head, came_from))
+                came_from = start
+            if kind in ("clear", "put", "remove", "turn"):
+                notes.extend("Note: %s." % p for p in game.problems())
         except (ValueError, MachineError) as e:
-            print(e)
+            notes.append(str(e))
+        print(render(grid_pieces(game.board), head_square(game.mover), came_from))
+        for note in notes:
+            print(note)
+    finish(game.mover)
+
+
+def _numbers(values, count, usage):
+    if len(values) != count:
+        raise ValueError(usage)
+    try:
+        return [float(v) for v in values]
+    except ValueError:
+        raise ValueError(usage)
 
 
 def cmd_jog(cfg, machine, args):
     mover = make_mover(cfg, machine)
-    position = machine.position() or (0.0, 0.0)
     magnet_on = False
     print(JOG_HELP)
     while True:
-        parts = input("jog (%.1f, %.1f)> " % position).split()
+        head = machine.head
+        prompt = "jog (%.1f, %.1f)> " % head if head else "jog (position unknown)> "
+        parts = ask(prompt).split()
         if not parts:
             continue
-        cmd = parts[0]
+        cmd, rest = parts[0].lower(), parts[1:]
         try:
             if cmd == "quit":
                 break
             elif cmd in ("x", "y"):
-                delta = float(parts[1])
-                target = (position[0] + delta, position[1]) if cmd == "x" else (position[0], position[1] + delta)
-                machine.move_to(target[0], target[1], cfg["travel_feed"])
-                position = target
+                (delta,) = _numbers(rest, 1, "Use %s with a distance in mm, like: %s 10" % (cmd, cmd))
+                if head is None:
+                    raise ValueError("The head's position is unknown, so it can't move relative to it.")
+                x, y = head
+                machine.move_to(x + delta if cmd == "x" else x, y + delta if cmd == "y" else y, cfg["travel_feed"])
             elif cmd == "go":
-                target = (float(parts[1]), float(parts[2]))
-                machine.move_to(target[0], target[1], cfg["travel_feed"])
-                position = target
+                x, y = _numbers(rest, 2, "Use go with x and y in mm, like: go 120 80")
+                machine.move_to(x, y, cfg["travel_feed"])
             elif cmd == "sq":
-                mover.goto(parse_square(parts[1]))
-                position = mover.geometry.square_mm(parts[1])
+                if len(rest) != 1:
+                    raise ValueError("Use sq with one square, like: sq e4")
+                mover.goto(parse_square(square(rest[0])))
             elif cmd == "move":
-                via_edges = len(parts) > 3 and parts[3] == "edges"
-                mover.run(Step(parse_square(parts[1]), parse_square(parts[2]), via_edges))
-                position = mover.geometry.square_mm(parts[2])
+                if len(rest) not in (2, 3) or (len(rest) == 3 and rest[2].lower() != "edges"):
+                    raise ValueError('Use move with two squares, like: move e2 e4 (add "edges" to go between squares)')
+                start, end = parse_square(square(rest[0])), parse_square(square(rest[1]))
+                mover.run(Step(start, end, via_edges=len(rest) == 3))
             elif cmd in ("on", "off"):
                 magnet_on = cmd == "on"
                 machine.magnet(magnet_on)
             elif cmd == "pos":
-                print(machine.position() or position)
-            elif cmd == "save" and parts[1] in ("a1", "h8"):
-                cfg["board"][parts[1]] = [round(position[0], 2), round(position[1], 2)]
+                print(machine.position() or head)
+            elif cmd == "save":
+                if len(rest) != 1 or rest[0].lower() not in CALIBRATION_SQUARES:
+                    raise ValueError("Use save with a1, h1 or a8, like: save a1")
+                if head is None:
+                    raise ValueError("The head's position is unknown, so there is nothing to save.")
+                name = rest[0].lower()
+                cfg["board"][name] = [round(head[0], 2), round(head[1], 2)]
+                mover.geometry = Geometry.from_config(cfg["board"])
                 config_file.save(cfg)
-                print("Saved %s = %s to config.json" % (parts[1], cfg["board"][parts[1]]))
+                print("Saved %s = %s to config.json" % (name, cfg["board"][name]))
+            elif cmd == "unlock":
+                machine.unlock()
+                print("Alarm cleared.")
             else:
-                print(JOG_HELP)
+                print("Unknown command '%s'.\n%s" % (cmd, JOG_HELP))
+                continue
             machine.wait_until_idle()
-        except (ValueError, IndexError) as e:
-            print(e or JOG_HELP)
+        except (ValueError, MachineError) as e:
+            print(e)
     if magnet_on:
         machine.magnet(False)
+    finish(mover)
+
+
+COMMANDS = {
+    "info": cmd_info,
+    "goto": cmd_goto,
+    "move": cmd_move,
+    "home": cmd_home,
+    "play": cmd_play,
+    "grid": cmd_grid,
+    "jog": cmd_jog,
+}
 
 
 def main(argv=None):
@@ -213,7 +331,7 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("info", help="show engraver info and the settings that matter")
-    p = sub.add_parser("goto", help="move the head under a square, magnet off")
+    p = sub.add_parser("goto", help="move the head under a square, then back to its corner")
     p.add_argument("square")
     p = sub.add_parser("move", help="drag a piece between two squares, no chess rules")
     p.add_argument("start")
@@ -226,19 +344,29 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     cfg = config_file.load()
-    machine = make_machine(cfg, args.fake)
-    commands = {
-        "info": cmd_info,
-        "goto": cmd_goto,
-        "move": cmd_move,
-        "home": cmd_home,
-        "play": cmd_play,
-        "grid": cmd_grid,
-        "jog": cmd_jog,
-    }
     try:
-        commands[args.command](cfg, machine, args)
+        machine = make_machine(cfg, args.fake)
+    except MachineError as e:
+        print(e)
+        return 1
+    try:
+        if args.command != "info" and not prepare(cfg, machine):
+            return 1
+        COMMANDS[args.command](cfg, machine, args)
     except KeyboardInterrupt:
-        machine.magnet(False)
+        machine.stop()
+        print(
+            "\nStopped. If the head was moving, its position is lost: "
+            "push it back into its corner before the next run."
+        )
+        return 1
+    except (ValueError, MachineError) as e:
+        print(e)
+        return 1
     finally:
         machine.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

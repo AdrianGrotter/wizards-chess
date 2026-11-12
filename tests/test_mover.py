@@ -2,7 +2,7 @@ import pytest
 
 from wizchess.geometry import Geometry
 from wizchess.machine import FakeMachine
-from wizchess.mover import Mover, Step, route
+from wizchess.mover import Mover, Step, route, travel_route
 
 
 def test_direct_route():
@@ -35,27 +35,59 @@ def test_route_to_graveyard():
     ]
 
 
+def on_lines_except_ends(path):
+    return all(f % 1 == 0.5 or r % 1 == 0.5 for f, r in path[1:-1])
+
+
+def test_travel_between_squares_follows_the_lines():
+    path = travel_route((4, 1), (4, 3))
+    assert path == [(4, 1), (3.5, 1.5), (3.5, 2.5), (4, 3)]
+    assert on_lines_except_ends(path)
+
+
+def test_travel_from_the_parking_corner():
+    path = travel_route((-0.91, -0.91), (2, 4))
+    assert path == [(-0.91, -0.91), (-0.5, -0.5), (1.5, -0.5), (1.5, 3.5), (2, 4)]
+
+
+def test_travel_to_a_line_point():
+    assert travel_route((4, 3), (-0.5, -0.5)) == [(4, 3), (3.5, 2.5), (-0.5, 2.5), (-0.5, -0.5)]
+
+
+def test_travel_to_where_the_head_already_is():
+    assert travel_route((4, 3), (4, 3)) == [(4, 3)]
+
+
+def make_mover(machine):
+    return Mover(machine, Geometry((31, 31), (269, 31), (31, 269)), 3000, 1500)
+
+
 def test_mover_grabs_drags_and_releases():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    mover = Mover(machine, Geometry((60, 60), (235, 235)), travel_feed=3000, drag_feed=1500)
-    mover.run(Step((4, 1), (4, 3)))
+    machine.head = None
+    make_mover(machine).run(Step((4, 1), (4, 3)))
     assert machine.lines == [
-        "G53 G1 X160.00 Y85.00 F3000",
+        "G53 G1 X167.00 Y65.00 F3000",
         "M3 S1000",
         "G4 P0.30",
-        "G53 G1 X160.00 Y135.00 F1500",
+        "G53 G1 X167.00 Y133.00 F1500",
         "M5",
         "G4 P0.30",
     ]
 
 
-def make_mover(machine):
-    return Mover(machine, Geometry((31, 31), (269, 269)), 3000, 1500)
+def test_head_travels_along_lines_to_the_piece():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    mover = make_mover(machine)
+    machine.head = mover.geometry.square_mm("e2")
+    mover.goto((4, 3))
+    assert machine.lines == ["G53 G1 X150.00 Y82.00 F3000", "G53 G1 X150.00 Y116.00 F3000", "G53 G1 X167.00 Y133.00 F3000"]
+    assert machine.head == (167, 133)
 
 
 def test_route_off_the_board_is_refused_before_anything_moves():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    with pytest.raises(ValueError, match="leaves the board"):
+    with pytest.raises(ValueError, match="leave the board"):
         make_mover(machine).run(Step((7, 0), (8, 0)))
     assert machine.lines == []
 
@@ -67,10 +99,34 @@ def test_route_out_of_reach_is_refused_before_anything_moves():
     assert machine.lines == []
 
 
+def test_check_refuses_without_moving():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    with pytest.raises(ValueError):
+        make_mover(machine).check(Step((7, 0), (8, 0)))
+    assert machine.lines == []
+
+
 def test_parking_beside_the_board_is_allowed_when_asked():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    make_mover(machine).run(Step((7, 0), (7.6, 0), leaves_board=True))
+    make_mover(machine).run(Step((7, 0), (7.4, 0), leaves_board=True))
     assert "M5" in machine.lines
+
+
+def test_park_goes_to_the_corner_along_the_lines():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    mover = make_mover(machine)
+    machine.head = mover.geometry.square_mm("e4")
+    mover.park()
+    assert machine.lines[-1] == "G53 G1 X0.00 Y0.00 F3000"
+    assert machine.lines[0] == "G53 G1 X150.00 Y116.00 F3000"
+    assert machine.head == (0, 0)
+
+
+def test_park_with_unknown_head_is_refused():
+    machine = FakeMachine((300, 300), 1000, echo=False)
+    machine.head = None
+    with pytest.raises(ValueError, match="unknown"):
+        make_mover(machine).park()
 
 
 class FailingMachine(FakeMachine):
@@ -87,7 +143,7 @@ def test_mover_releases_magnet_when_a_drag_fails():
     assert machine.lines[-1] == "M5"
 
 
-def test_park_returns_the_head_to_the_corner_with_the_magnet_off():
+def test_stop_forgets_the_head_position():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    make_mover(machine).park()
-    assert machine.lines == ["G53 G1 X0.00 Y0.00 F3000"]
+    machine.stop()
+    assert machine.head is None

@@ -11,13 +11,15 @@ class MachineError(Exception):
 class GcodeMachine:
     """The engraver as a small set of actions, expressed as G-code lines.
 
-    Subclasses decide where the lines go by implementing send().
+    Subclasses decide where the lines go by implementing send(). head is the
+    last commanded position in machine millimetres, or None once it is unknown.
     """
 
     def __init__(self, travel_mm, magnet_power, homing_switches=False):
         self.travel_mm = (float(travel_mm[0]), float(travel_mm[1]))
         self.magnet_power = int(magnet_power)
         self.homing_switches = homing_switches
+        self.head = (0.0, 0.0)
 
     def send(self, line, timeout=None):
         raise NotImplementedError
@@ -37,6 +39,7 @@ class GcodeMachine:
         self.check_reach(x, y)
         # G53 ignores any work offset stored on the engraver by other software.
         self.send("G53 G1 X%.2f Y%.2f F%d" % (x, y, feed), timeout=MOTION_TIMEOUT)
+        self.head = (float(x), float(y))
 
     def magnet(self, on):
         self.send("M3 S%d" % self.magnet_power if on else "M5", timeout=MOTION_TIMEOUT)
@@ -46,11 +49,25 @@ class GcodeMachine:
 
     def home(self):
         if not self.homing_switches:
-            raise RuntimeError(
+            raise MachineError(
                 "No homing switches: set homing_switches to true in config.json "
                 "once they are installed and $22=1"
             )
         self.send("$H", timeout=MOTION_TIMEOUT)
+        self.head = self.position() or (0.0, 0.0)
+
+    def unlock(self):
+        self.send("$X")
+
+    def set_setting(self, key, value):
+        self.send("$%s=%s" % (key, value))
+
+    def settings(self):
+        return {}
+
+    def stop(self):
+        """Halt all motion at once, including queued moves, and switch the magnet off."""
+        self.head = None
 
     def wait_until_idle(self):
         pass
@@ -75,3 +92,7 @@ class FakeMachine(GcodeMachine):
         if self.echo:
             print("  > " + line)
         return []
+
+    def stop(self):
+        self.lines.append("<stop>")
+        super().stop()

@@ -126,3 +126,22 @@ def test_helpers_match_python_chess():
             assert sorted(mini.between(a, b)) == list(chess.SquareSet(chess.between(a, b)))
             assert mini.square_distance(a, b) == chess.square_distance(a, b)
     assert mini.E1 == chess.E1 and mini.H8 == chess.H8
+
+
+class Frozen(list):
+    def __setitem__(self, index, value):
+        raise AssertionError("the board was changed while only thinking about moves")
+
+
+@pytest.mark.parametrize(
+    "fen",
+    [mini.STARTING_FEN, "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+     "rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3"],
+)
+def test_working_out_the_legal_moves_never_touches_the_board(fen):
+    board = mini.Board(fen)
+    board.squares = Frozen(board.squares)
+    assert board.legal_moves
+    board.status()
+    board.is_checkmate()
+    board.fen()

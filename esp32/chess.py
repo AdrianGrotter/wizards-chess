@@ -224,9 +224,10 @@ class Board:
                 return sq
         return None
 
-    def _attackers(self, color, sq):
-        """Squares of the pieces of color that attack sq."""
-        squares = self.squares
+    def _attackers(self, color, sq, squares=None):
+        """Squares of the pieces of color that attack sq, on this board or on the given squares."""
+        if squares is None:
+            squares = self.squares
         found = []
         for s in _KNIGHT[sq]:
             p = squares[s]
@@ -372,25 +373,24 @@ class Board:
         return moves
 
     def _keeps_king_safe(self, move):
-        """Whether the side to move still has its king out of check after a pseudo-legal move."""
-        squares = self.squares
+        """Whether the side to move still has its king out of check after a pseudo-legal move.
+
+        Tried on a copy: the board itself may be read from another thread and
+        must never show a move that is only being considered.
+        """
+        squares = list(self.squares)
         us = self.turn
-        piece = squares[move.from_square]
-        captured = squares[move.to_square]
-        passed = None
         if self.is_en_passant(move):
-            passed = move.to_square + (-8 if us else 8)
-            passed_piece = squares[passed]
-            squares[passed] = None
-        squares[move.to_square] = piece
+            squares[move.to_square + (-8 if us else 8)] = None
+        squares[move.to_square] = squares[move.from_square]
         squares[move.from_square] = None
-        king = self.king(us)
-        safe = king is None or not self._attackers(not us, king)
-        squares[move.from_square] = piece
-        squares[move.to_square] = captured
-        if passed is not None:
-            squares[passed] = passed_piece
-        return safe
+        king = None
+        for sq in range(63, -1, -1):
+            piece = squares[sq]
+            if piece is not None and piece.piece_type == KING and piece.color == us:
+                king = sq
+                break
+        return king is None or not self._attackers(not us, king, squares)
 
     @property
     def legal_moves(self):
@@ -437,13 +437,13 @@ class Board:
         return (placement, self.turn, self.clean_castling_rights(), ep)
 
     def push(self, move):
-        squares = self.squares
         us = self.turn
-        piece = squares[move.from_square]
+        piece = self.squares[move.from_square]
         if piece is None:
             raise ValueError("no piece on %s" % SQUARE_NAMES[move.from_square])
+        squares = list(self.squares)
         self._stack.append((
-            list(squares), us, self.castling_rights, self.ep_square,
+            self.squares, us, self.castling_rights, self.ep_square,
             self.halfmove_clock, self.fullmove_number, self._position_key(),
         ))
         capture = self.is_capture(move)
@@ -473,6 +473,7 @@ class Board:
             elif piece.piece_type == PAWN and abs(move.to_square - move.from_square) == 16:
                 self.ep_square = move.from_square + (8 if us else -8)
             squares[move.to_square] = Piece(move.promotion, us) if move.promotion else piece
+        self.squares = squares
         self.turn = not us
 
     def pop(self):
@@ -666,10 +667,9 @@ class Board:
             if valid_ep is not None:
                 pushed_to = valid_ep + (-8 if self.turn else 8)
                 pushed_from = valid_ep + (8 if self.turn else -8)
-                pawn = self.squares[pushed_to]
-                self.squares[pushed_to], self.squares[pushed_from] = None, pawn
-                checked_before = bool(self._attackers(not self.turn, king))
-                self.squares[pushed_to], self.squares[pushed_from] = pawn, None
+                before = list(self.squares)
+                before[pushed_to], before[pushed_from] = None, before[pushed_to]
+                checked_before = bool(self._attackers(not self.turn, king, before))
                 if len(checkers) > 1 or (max(checkers) != pushed_to and checked_before):
                     errors |= STATUS_IMPOSSIBLE_CHECK
             elif len(checkers) > 2 or (len(checkers) == 2 and _on_one_line(min(checkers), max(checkers), king)):

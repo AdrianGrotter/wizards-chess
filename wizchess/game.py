@@ -3,6 +3,7 @@ import chess
 from .geometry import on_board, square_name
 from .machine import MachineError
 from .mover import Step
+from .reset import plan_reset
 
 POSITION_PROBLEMS = [
     (chess.STATUS_EMPTY, "the grid is empty"),
@@ -118,6 +119,64 @@ class Game:
 
     def reset(self):
         self.board.reset()
+
+    def reset_pieces(self, ask_player):
+        """Drag every piece back to its starting square and start a new game.
+
+        ask_player(message) shows an instruction for the players and returns
+        False if they call the reset off. Pieces with no starting square are
+        lifted off by hand first; captured pieces are put back by hand last.
+        The grid follows every drag, so an interruption leaves it accurate up
+        to the piece that was moving. Returns notes for the players.
+        """
+        plan = plan_reset(self.board)
+        steps = [Step(grid(s), grid(t), via_edges=True) for s, t in plan.moves]
+        for step in steps:
+            self.mover.check(step)
+
+        if plan.extra:
+            names = ", ".join(self._describe(sq) for sq in plan.extra)
+            if not ask_player("Take these pieces off the board: %s." % names):
+                raise ValueError("Reset called off. Nothing was moved.")
+            for sq in plan.extra:
+                self.board.remove_piece_at(sq)
+
+        for (s, t), step in zip(plan.moves, steps):
+            try:
+                self.mover.run(step)
+            except Exception as e:
+                self._tidy()
+                raise MoveInterrupted(
+                    "The reset stopped while moving the %s from %s to %s: %s\n"
+                    "The grid shows every piece moved so far; that one may be partway. "
+                    "Put it back on %s and run reset again."
+                    % (self._describe(s, with_square=False), chess.square_name(s).upper(),
+                       chess.square_name(t).upper(), e, chess.square_name(s).upper())
+                )
+            self.board.set_piece_at(t, self.board.remove_piece_at(s))
+
+        notes = []
+        if plan.missing:
+            names = ", ".join(
+                "%s %s on %s" % (_color_name(p.color), chess.piece_name(p.piece_type), chess.square_name(sq).upper())
+                for sq, p in plan.missing
+            )
+            if not ask_player("Put these pieces on the board: %s." % names):
+                self._tidy()
+                notes.append("Those pieces are still missing from the grid; use put once they are on the board.")
+                return notes
+            for sq, p in plan.missing:
+                self.board.set_piece_at(sq, p)
+        self.board.reset()
+        if self.graveyard is not None:
+            self.graveyard.count = {"white": 0, "black": 0}
+        notes.append("All pieces are on their starting squares. White to move.")
+        return notes
+
+    def _describe(self, square, with_square=True):
+        piece = self.board.piece_at(square)
+        text = "%s %s" % (_color_name(piece.color), chess.piece_name(piece.piece_type))
+        return "%s on %s" % (text, chess.square_name(square).upper()) if with_square else text
 
     def clear(self):
         self.board.clear()

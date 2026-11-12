@@ -147,6 +147,11 @@ def cmd_home(cfg, machine, args):
     machine.home()
 
 
+def tell_player(message):
+    answer = ask(message + "\nPress Enter when done (or type 'cancel'). ")
+    return answer.strip().lower() not in ("cancel", "c", "quit")
+
+
 def make_game(cfg, machine):
     columns = cfg.get("graveyard_columns")
 
@@ -208,11 +213,13 @@ def cmd_grid(cfg, machine, args):
             if kind == "help":
                 print(GRID_HELP)
                 continue
-            if kind == "reset":
+            if kind == "reset" and command[1] == "grid":
                 game.reset()
-                game.mover.park()
                 came_from = None
-                notes.append("Head is back in its corner. Set the pieces up in the starting position by hand.")
+            elif kind == "reset":
+                came_from = None
+                notes = game.reset_pieces(tell_player)
+                game.mover.park()
             elif kind == "park":
                 game.mover.park()
             elif kind == "unlock":

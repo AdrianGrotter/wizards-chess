@@ -9,7 +9,8 @@ GRID_HELP = """\
   put E4 N        place a piece on the grid (white: KQRBNP, black: kqrbnp)
   remove E4       take a piece off the grid
   turn black      set whose turn it is (after fixing the grid by hand)
-  reset           new game: starting position, head back to its corner
+  reset           new game: drag every piece back to its starting square
+  reset grid      new game on the grid only, after setting the pieces up by hand
   clear           empty grid (head stays where it is)
   park            head back to its corner, magnet off
   unlock          clear an engraver alarm
@@ -60,7 +61,7 @@ def parse_command(text):
     """Turn a typed line into a command tuple, or ValueError with a message for the player.
 
     ("move", start, end, promotion or None), ("goto", sq), ("put", sq, piece),
-    ("remove", sq), ("turn", "white"|"black"), ("reset",), ("clear",), ("park",),
+    ("remove", sq), ("turn", "white"|"black"), ("reset", "pieces"|"grid"), ("clear",), ("park",),
     ("unlock",), ("grid",), ("help",), ("quit",)
     Squares are returned in lower case; a put piece keeps its case (colour).
     """
@@ -78,6 +79,12 @@ def parse_command(text):
                 "'%s' is not a piece. Use K Q R B N P for white, k q r b n p for black." % piece
             )
         return ("put", square(tokens[1]), piece)
+    if word == "reset":
+        if len(tokens) == 1:
+            return ("reset", "pieces")
+        if len(tokens) == 2 and tokens[1].lower() == "grid":
+            return ("reset", "grid")
+        raise ValueError("Use reset on its own, or reset grid to only reset the grid.")
     if word == "turn":
         if len(tokens) != 2 or tokens[1].lower() not in ("white", "black"):
             raise ValueError("Use turn with white or black, like: turn black")

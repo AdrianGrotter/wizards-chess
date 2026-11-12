@@ -24,7 +24,8 @@ def test_put_keeps_the_piece_colour():
 
 def test_remove_reset_clear():
     assert parse_command("remove E4") == ("remove", "e4")
-    assert parse_command("reset") == ("reset",)
+    assert parse_command("reset") == ("reset", "pieces")
+    assert parse_command("reset grid") == ("reset", "grid")
     assert parse_command("CLEAR") == ("clear",)
     assert parse_command("park") == ("park",)
 
@@ -44,7 +45,8 @@ def test_remove_reset_clear():
         ("put e4 x", "'x' is not a piece."),
         ("put e4", "Use put with a square and a piece"),
         ("remove", "Use remove with one square"),
-        ("reset now", "'reset' doesn't take anything after it."),
+        ("reset now", "Use reset on its own, or reset grid"),
+        ("park now", "'park' doesn't take anything after it."),
     ],
 )
 def test_clear_error_messages(text, message):

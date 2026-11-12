@@ -58,6 +58,18 @@ Once homing switches are installed, set `$22=1` on the engraver and
 - After a reply goes missing, the connection is no longer trusted and every command
   says to restart the tool.
 
+## Resetting the board
+
+`reset` in the grid drags every piece back to its starting square, along the lines
+between squares so nothing is knocked over. It asks the players to:
+
+1. lift off pieces that have no starting square (such as a second queen from a
+   promotion), before anything moves;
+2. put back captured pieces by hand, at the end.
+
+When two pieces are on each other's squares, one steps aside to a free square first.
+`reset grid` only resets the grid, for when the pieces were set up by hand.
+
 ## Calibration
 
 1. Run `python -m wizchess jog`.
@@ -90,6 +102,7 @@ move off before anything moves.
 | `machine.py` | the engraver as actions (`move_to`, `magnet`, `home`), plus a fake | yes, as is |
 | `grbl.py` | sends those actions over USB serial | replace with UART/WiFi |
 | `game.py` | chess rules (python-chess), captures, castling, en passant | needs a lighter chess library |
+| `reset.py` | plans the drags that put every piece back on its starting square | yes, with a lighter chess library |
 | `cli.py` | command line | laptop only |
 
 Positions are sent as machine coordinates (`G53`), so offsets that other software

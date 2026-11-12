@@ -153,7 +153,7 @@ def tell_player(message):
 
 
 def make_game(cfg, machine):
-    columns = cfg.get("graveyard_columns")
+    graveyard = cfg.get("graveyard")
 
     def remove_by_hand(name):
         answer = ask(
@@ -163,7 +163,7 @@ def make_game(cfg, machine):
 
     return Game(
         make_mover(cfg, machine),
-        Graveyard(columns) if columns else None,
+        Graveyard.from_config(graveyard) if graveyard else None,
         remove_by_hand=remove_by_hand,
     )
 

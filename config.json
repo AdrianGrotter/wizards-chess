@@ -3,7 +3,7 @@
   "baud": 115200,
   "travel_mm": [
     300,
-    300
+    320
   ],
   "magnet_power": 1000,
   "homing_switches": false,
@@ -12,16 +12,20 @@
   "board": {
     "a1": [
       31,
-      31
+      41
     ],
     "h1": [
       269,
-      31
+      41
     ],
     "a8": [
       31,
-      269
+      279
     ]
   },
-  "graveyard_columns": null
+  "graveyard": {
+    "white_row": -1,
+    "black_row": 8,
+    "spacing": 0.5
+  }
 }

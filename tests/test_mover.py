@@ -147,3 +147,24 @@ def test_stop_forgets_the_head_position():
     machine = FakeMachine((300, 300), 1000, echo=False)
     machine.stop()
     assert machine.head is None
+
+
+def test_route_out_runs_along_the_edge_and_steps_straight_into_the_slot():
+    from wizchess.mover import route_out
+
+    assert route_out((3, 4), (3.5, 8)) == [(3, 4), (3.5, 4.5), (3.5, 7.5), (3.5, 8)]
+    assert route_out((4, 0), (1.0, -1)) == [(4, 0), (3.5, -0.5), (1.0, -0.5), (1.0, -1)]
+    assert route_out((0, 6), (7.5, 8)) == [(0, 6), (0.5, 6.5), (0.5, 7.5), (7.5, 7.5), (7.5, 8)]
+
+
+def test_every_slot_is_reachable_on_the_real_layout():
+    from wizchess.game import Graveyard
+
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    mover = Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 3000, 1500)
+    graveyard = Graveyard({"white": -1, "black": 8})
+    for color in ("white", "black"):
+        for slot in graveyard.slots[color]:
+            for square in [(0, 0), (7, 7), (3, 3)]:
+                mover.check(Step(square, slot, leaves_board=True))
+                mover.check(Step(slot, square, leaves_board=True))

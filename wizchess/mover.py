@@ -45,6 +45,23 @@ def route(start, end, via_edges=False):
     return [p for i, p in enumerate(path) if i == 0 or p != path[i - 1]]
 
 
+def route_out(square, slot):
+    """Grid points for dragging a piece from a square to a slot in a row beyond the board.
+
+    The piece steps diagonally onto the lines between squares, follows a line
+    to the board's edge on the row's side, runs along that edge, and steps
+    straight out into its slot, between the pieces already parked there.
+    Reverse the list to bring a parked piece back.
+    """
+    (f0, r0), (fs, rs) = square, slot
+    toward_row = 1 if rs > r0 else -1
+    edge = BOARD_EDGE_HIGH if toward_row > 0 else BOARD_EDGE_LOW
+    sf = _sign(fs - f0) or _toward_centre(f0)
+    leave = (f0 + 0.5 * sf, r0 + 0.5 * toward_row)
+    path = [square, leave, (leave[0], edge), (fs, edge), slot]
+    return [p for i, p in enumerate(path) if i == 0 or p != path[i - 1]]
+
+
 def _line_toward(position, target):
     """The nearest line between squares from position, on target's side."""
     if _on_line(position):
@@ -127,9 +144,16 @@ class Mover:
                 )
             self.machine.check_reach(*self.geometry.to_mm(point))
 
+    def path(self, step):
+        if not step.leaves_board:
+            return route(step.start, step.end, step.via_edges)
+        if on_board(step.start):
+            return route_out(step.start, step.end)
+        return list(reversed(route_out(step.end, step.start)))
+
     def check(self, step):
         """Refuse a step before anything moves if any part of it is off the board or out of reach."""
-        self._check(route(step.start, step.end, step.via_edges), not step.leaves_board)
+        self._check(self.path(step), not step.leaves_board)
 
     def goto(self, point):
         """Move the head, magnet off, to a grid point along the lines between squares."""
@@ -152,7 +176,7 @@ class Mover:
         self.machine.wait_until_idle()
 
     def run(self, step):
-        path = route(step.start, step.end, step.via_edges)
+        path = self.path(step)
         self._check(path, not step.leaves_board)
         self.goto(path[0])
         try:

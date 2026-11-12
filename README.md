@@ -65,7 +65,7 @@ between squares so nothing is knocked over. It asks the players to:
 
 1. lift off pieces that have no starting square (such as a second queen from a
    promotion), before anything moves;
-2. put back captured pieces by hand, at the end.
+2. put back by hand any captured piece that isn't parked beside the board, at the end.
 
 When two pieces are on each other's squares, one steps aside to a free square first.
 `reset grid` only resets the grid, for when the pieces were set up by hand.
@@ -81,9 +81,18 @@ slightly rotated is still hit dead centre.
 
 ## Captured pieces
 
-With `"graveyard_columns": null` in `config.json`, `play` asks a player to lift the captured
-piece off its square before the capturing piece moves in. Typing `cancel` there calls the
-move off before anything moves.
+The machine reaches about 300 × 324 mm, so there is a spare strip beyond each side's back
+rank. With `graveyard` set in `config.json`, a captured piece is dragged into a row there:
+White's below rank 1, Black's above rank 8, half a square (17 mm) apart, filling from the
+middle outwards. A row has 17 places, more than the 15 pieces a side can lose. Pieces
+travel along the lines between squares, run along the board's edge, and step straight
+out into their place.
+
+`reset` drags parked pieces back to their starting squares too.
+
+Set `"graveyard": null` to have players lift captured pieces off by hand instead; `play`
+and `grid` then ask before the capturing piece moves in, and typing `cancel` calls the
+move off.
 
 ## Engraver settings
 

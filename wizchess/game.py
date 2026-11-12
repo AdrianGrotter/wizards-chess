@@ -44,27 +44,48 @@ def position_problems(board):
 
 
 class Graveyard:
-    """Hands out off-board grid points for captured pieces.
+    """Parking slots for captured pieces, in a row beyond each side's back rank.
 
-    columns maps "white"/"black" to the file columns their captured
-    pieces are lined up in, eight per column from rank 1 upwards.
+    rows maps "white"/"black" to the grid rank of that colour's row: -1 is
+    the row below rank 1, 8 the row above rank 8. Slots are spacing squares
+    apart, fill from the middle outwards, and reach no further sideways than
+    the board's own edges.
     """
 
-    def __init__(self, columns):
-        self.columns = columns
-        self.count = {"white": 0, "black": 0}
+    def __init__(self, rows, spacing=0.5):
+        count = int(round(8 / spacing)) + 1
+        files = sorted((-0.5 + i * spacing for i in range(count)), key=lambda f: (abs(f - 3.5), f))
+        self.slots = {color: [(f, float(rows[color])) for f in files] for color in ("white", "black")}
+        self.parked = {"white": [], "black": []}
+
+    @classmethod
+    def from_config(cls, config):
+        return cls({"white": config["white_row"], "black": config["black_row"]}, config.get("spacing", 0.5))
 
     def peek_slot(self, color):
-        index = self.count[color]
-        columns = self.columns[color]
-        if index >= 8 * len(columns):
-            raise ValueError("No room left beside the board for captured %s pieces." % color)
-        return (columns[index // 8], index % 8)
+        taken = {slot for slot, _ in self.parked[color]}
+        for slot in self.slots[color]:
+            if slot not in taken:
+                return slot
+        raise ValueError("No room left beside the board for captured %s pieces." % color)
 
-    def next_slot(self, color):
+    def park(self, piece):
+        color = _color_name(piece.color)
         slot = self.peek_slot(color)
-        self.count[color] += 1
+        self.parked[color].append((slot, piece))
         return slot
+
+    def take_back(self, piece):
+        """The slot of a parked piece of this kind, removed from the row, or None."""
+        parked = self.parked[_color_name(piece.color)]
+        for i, (slot, p) in enumerate(parked):
+            if p == piece:
+                del parked[i]
+                return slot
+        return None
+
+    def clear(self):
+        self.parked = {"white": [], "black": []}
 
 
 def captured_square(board, move):
@@ -90,7 +111,7 @@ def physical_steps(board, move, graveyard):
     captured = captured_square(board, move)
     if captured is not None and graveyard is not None:
         slot = graveyard.peek_slot(_color_name(board.color_at(captured)))
-        steps.append(Step(grid(captured), slot, via_edges=True, leaves_board=True))
+        steps.append(Step(grid(captured), slot, leaves_board=True))
 
     if board.is_castling(move):
         rank = chess.square_rank(move.from_square)
@@ -156,6 +177,25 @@ class Game:
             self.board.set_piece_at(t, self.board.remove_piece_at(s))
 
         notes = []
+        missing = []
+        for sq, piece in plan.missing:
+            slot = self.graveyard.take_back(piece) if self.graveyard is not None else None
+            if slot is None:
+                missing.append((sq, piece))
+                continue
+            step = Step(slot, grid(sq), leaves_board=True)
+            try:
+                self.mover.run(step)
+            except Exception as e:
+                self.graveyard.parked[_color_name(piece.color)].append((slot, piece))
+                self._tidy()
+                raise MoveInterrupted(
+                    "The reset stopped while bringing the captured %s %s back to %s: %s\n"
+                    "It may be partway. Put it back in its place beside the board and run reset again."
+                    % (_color_name(piece.color), chess.piece_name(piece.piece_type), chess.square_name(sq).upper(), e)
+                )
+            self.board.set_piece_at(sq, piece)
+        plan.missing = missing
         if plan.missing:
             names = ", ".join(
                 "%s %s on %s" % (_color_name(p.color), chess.piece_name(p.piece_type), chess.square_name(sq).upper())
@@ -169,7 +209,7 @@ class Game:
                 self.board.set_piece_at(sq, p)
         self.board.reset()
         if self.graveyard is not None:
-            self.graveyard.count = {"white": 0, "black": 0}
+            self.graveyard.clear()
         notes.append("All pieces are on their starting squares. White to move.")
         return notes
 
@@ -352,7 +392,7 @@ class Game:
             raise MoveInterrupted(self._interrupted(move, steps, done, removed_by_hand, e))
 
         if captured is not None and self.graveyard is not None:
-            self.graveyard.next_slot(_color_name(self.board.color_at(captured)))
+            self.graveyard.park(self.board.piece_at(captured))
         notes = []
         if move.promotion:
             notes.append(

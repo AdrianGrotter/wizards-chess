@@ -129,3 +129,22 @@ def test_interrupted_reset_keeps_the_grid_accurate_so_far():
     moved_home = (pieces.get(chess.E2) == chess.Piece.from_symbol("P")) + (pieces.get(chess.E7) == chess.Piece.from_symbol("p"))
     assert moved_home == 1
     assert len(pieces) == 32
+
+
+def test_captured_pieces_are_parked_and_brought_back_by_the_magnet():
+    from wizchess.game import Graveyard
+
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    asked = []
+    game = Game(
+        Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 3000, 1500),
+        Graveyard({"white": -1, "black": 8}),
+    )
+    for m in ["e4", "d5", "exd5", "Qxd5", "Nc3", "Qxa2", "Rxa2"]:
+        game.play(m)
+    assert len(game.graveyard.parked["white"]) == 2
+    assert len(game.graveyard.parked["black"]) == 2
+    game.reset_pieces(lambda message: asked.append(message) or True)
+    assert asked == []
+    assert game.board.fen() == chess.Board().fen()
+    assert game.graveyard.parked == {"white": [], "black": []}

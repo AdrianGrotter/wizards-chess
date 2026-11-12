@@ -7,14 +7,14 @@ from wizchess.geometry import Geometry
 from wizchess.machine import FakeMachine
 from wizchess.mover import Mover, Step
 
-COLUMNS = {"white": [-1, -2], "black": [8, 9]}
+ROWS = {"white": -1, "black": 8}
 
 
 def steps_after(moves, last):
     board = chess.Board()
     for m in moves:
         board.push_uci(m)
-    return physical_steps(board, chess.Move.from_uci(last), Graveyard(COLUMNS))
+    return physical_steps(board, chess.Move.from_uci(last), Graveyard(ROWS))
 
 
 def test_pawn_moves_straight():
@@ -27,12 +27,12 @@ def test_knight_goes_around():
 
 def test_capture_clears_the_square_first():
     steps = steps_after(["e2e4", "d7d5"], "e4d5")
-    assert steps == [Step((3, 4), (8, 0), via_edges=True, leaves_board=True), Step((4, 3), (3, 4))]
+    assert steps == [Step((3, 4), (3.5, 8), leaves_board=True), Step((4, 3), (3, 4))]
 
 
 def test_en_passant_removes_the_passed_pawn():
     steps = steps_after(["e2e4", "a7a6", "e4e5", "d7d5"], "e5d6")
-    assert steps == [Step((3, 4), (8, 0), via_edges=True, leaves_board=True), Step((4, 4), (3, 5))]
+    assert steps == [Step((3, 4), (3.5, 8), leaves_board=True), Step((4, 4), (3, 5))]
 
 
 def test_kingside_castling_moves_king_then_rook():
@@ -43,23 +43,42 @@ def test_kingside_castling_moves_king_then_rook():
     ]
 
 
-def test_graveyard_fills_columns_in_order():
-    g = Graveyard({"white": [-1, -2], "black": [8]})
-    slots = [g.next_slot("white") for _ in range(9)]
-    assert slots[0] == (-1, 0) and slots[7] == (-1, 7) and slots[8] == (-2, 0)
+def test_graveyard_rows_fill_from_the_middle_outwards():
+    g = Graveyard(ROWS)
+    pawn = chess.Piece.from_symbol("p")
+    slots = [g.park(pawn) for _ in range(5)]
+    assert slots == [(3.5, 8), (3.0, 8), (4.0, 8), (2.5, 8), (4.5, 8)]
+    assert g.park(chess.Piece.from_symbol("N")) == (3.5, -1)
+
+
+def test_graveyard_row_holds_every_piece_a_side_can_lose():
+    g = Graveyard(ROWS)
+    for _ in range(15):
+        g.park(chess.Piece.from_symbol("p"))
+    assert all(-0.5 <= f <= 7.5 for f, _ in g.slots["black"])
+    assert len(g.slots["black"]) == 17
 
 
 def test_graveyard_full():
-    g = Graveyard({"white": [-1], "black": [8]})
-    for _ in range(8):
-        g.next_slot("black")
+    g = Graveyard(ROWS, spacing=1)
+    for _ in range(9):
+        g.park(chess.Piece.from_symbol("p"))
     with pytest.raises(ValueError, match="No room left"):
-        g.next_slot("black")
+        g.park(chess.Piece.from_symbol("p"))
+
+
+def test_graveyard_gives_back_the_right_piece():
+    g = Graveyard(ROWS)
+    g.park(chess.Piece.from_symbol("p"))
+    knight_slot = g.park(chess.Piece.from_symbol("n"))
+    assert g.take_back(chess.Piece.from_symbol("n")) == knight_slot
+    assert g.take_back(chess.Piece.from_symbol("n")) is None
+    assert g.peek_slot("black") == knight_slot
 
 
 def test_game_accepts_uci_and_san_and_rejects_illegal():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    game = Game(Mover(machine, Geometry((60, 60), (235, 60), (60, 235)), 3000, 1500), Graveyard(COLUMNS))
+    game = Game(Mover(machine, Geometry((60, 60), (235, 60), (60, 235)), 3000, 1500), Graveyard(ROWS))
     game.play("e2e4")
     game.play("e5")
     with pytest.raises(ValueError):
@@ -69,7 +88,7 @@ def test_game_accepts_uci_and_san_and_rejects_illegal():
 
 def test_scholars_mate_reports_checkmate():
     machine = FakeMachine((300, 300), 1000, echo=False)
-    game = Game(Mover(machine, Geometry((60, 60), (235, 60), (60, 235)), 3000, 1500), Graveyard(COLUMNS))
+    game = Game(Mover(machine, Geometry((60, 60), (235, 60), (60, 235)), 3000, 1500), Graveyard(ROWS))
     notes = []
     for m in ["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7"]:
         notes = game.play(m)
@@ -282,12 +301,12 @@ def test_bad_route_is_refused_before_asking_for_the_captured_piece():
 
 def test_graveyard_slot_is_only_used_when_the_move_happens():
     machine = BreaksOnDrag(fail_on_grab=1)
-    graveyard = Graveyard({"white": [8], "black": [8]})
+    graveyard = Graveyard(ROWS)
     game = Game(Mover(machine, Geometry((31, 31), (234, 31), (31, 234)), 3000, 1500), graveyard)
     game.board.set_fen("4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1")
     with pytest.raises(MoveInterrupted):
         game.play_move(game.move_between("e4", "d5"))
-    assert graveyard.count == {"white": 0, "black": 0}
+    assert graveyard.parked == {"white": [], "black": []}
 
 
 def test_castling_after_the_king_has_moved_says_so():

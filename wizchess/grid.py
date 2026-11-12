@@ -8,6 +8,8 @@ GRID_HELP = """\
   A4              move the head under A4, magnet off
   put E4 N        place a piece on the grid (white: KQRBNP, black: kqrbnp)
   remove E4       take a piece off the grid
+  rules off       move any piece anywhere (A1 A8), ignoring the chess rules
+  rules on        back to moves that follow the rules
   turn black      set whose turn it is (after fixing the grid by hand)
   reset           new game: drag every piece back to its starting square
   reset grid      new game on the grid only, after setting the pieces up by hand
@@ -16,7 +18,7 @@ GRID_HELP = """\
   unlock          clear an engraver alarm
   grid            show the grid
   quit            send the head back to its corner and leave
-Moves follow the chess rules and alternate between White and Black.
+Moves follow the chess rules and alternate between White and Black, unless rules are off.
 Pieces: upper case white, lower case black. [ ] is the head, o where the last piece came from."""
 
 WORDS = {
@@ -24,7 +26,7 @@ WORDS = {
     "grid": "grid", "show": "grid",
     "help": "help", "?": "help", "h": "help",
     "reset": "reset", "clear": "clear", "park": "park", "unlock": "unlock",
-    "put": "put", "remove": "remove", "del": "remove", "turn": "turn",
+    "put": "put", "remove": "remove", "del": "remove", "turn": "turn", "rules": "rules",
 }
 EXAMPLES = "Type a square (E4), a move (E2 E4), or 'help' for all commands."
 
@@ -61,7 +63,7 @@ def parse_command(text):
     """Turn a typed line into a command tuple, or ValueError with a message for the player.
 
     ("move", start, end, promotion or None), ("goto", sq), ("put", sq, piece),
-    ("remove", sq), ("turn", "white"|"black"), ("reset", "pieces"|"grid"), ("clear",), ("park",),
+    ("remove", sq), ("turn", "white"|"black"), ("rules", "on"|"off"), ("reset", "pieces"|"grid"), ("clear",), ("park",),
     ("unlock",), ("grid",), ("help",), ("quit",)
     Squares are returned in lower case; a put piece keeps its case (colour).
     """
@@ -85,6 +87,10 @@ def parse_command(text):
         if len(tokens) == 2 and tokens[1].lower() == "grid":
             return ("reset", "grid")
         raise ValueError("Use reset on its own, or reset grid to only reset the grid.")
+    if word == "rules":
+        if len(tokens) != 2 or tokens[1].lower() not in ("on", "off"):
+            raise ValueError("Use rules with on or off, like: rules off")
+        return ("rules", tokens[1].lower())
     if word == "turn":
         if len(tokens) != 2 or tokens[1].lower() not in ("white", "black"):
             raise ValueError("Use turn with white or black, like: turn black")

@@ -373,26 +373,7 @@ class Game:
         grid is left at the position before the move.
         """
         steps = physical_steps(self.board, move, self.graveyard)
-        for step in steps:
-            self.mover.check(step)
-
-        captured = captured_square(self.board, move)
-        removed_by_hand = None
-        if captured is not None and self.graveyard is None and self.remove_by_hand:
-            removed_by_hand = chess.square_name(captured)
-            if self.remove_by_hand(removed_by_hand) is False:
-                raise ValueError("Move called off. Nothing was moved.")
-
-        done = 0
-        try:
-            for step in steps:
-                self.mover.run(step)
-                done += 1
-        except Exception as e:
-            raise MoveInterrupted(self._interrupted(move, steps, done, removed_by_hand, e))
-
-        if captured is not None and self.graveyard is not None:
-            self.graveyard.park(self.board.piece_at(captured))
+        self._carry_out(move.from_square, move.to_square, steps, captured_square(self.board, move))
         notes = []
         if move.promotion:
             notes.append(
@@ -408,10 +389,58 @@ class Game:
             notes.append("Game over: %s" % self.board.result())
         return notes
 
-    def _interrupted(self, move, steps, done, removed_by_hand, error):
+    def free_move(self, start, end):
+        """Drag a piece anywhere, ignoring the chess rules. Returns notes for the players.
+
+        A piece already on the target square is parked beside the board (or
+        lifted off by hand). The drag always runs along the lines between
+        squares, since without the rules the straight path may cross pieces.
+        Whose turn it is stays as it was.
+        """
+        from_square, to_square = chess.parse_square(start), chess.parse_square(end)
+        piece = self.board.piece_at(from_square)
+        if piece is None:
+            raise ValueError("There is no piece on %s." % start.upper())
+        captured = to_square if self.board.piece_at(to_square) else None
+        steps = []
+        if captured is not None and self.graveyard is not None:
+            slot = self.graveyard.peek_slot(_color_name(self.board.color_at(captured)))
+            steps.append(Step(grid(captured), slot, leaves_board=True))
+        steps.append(Step(grid(from_square), grid(to_square), via_edges=True))
+        self._carry_out(from_square, to_square, steps, captured)
+        self.board.remove_piece_at(to_square)
+        self.board.set_piece_at(to_square, self.board.remove_piece_at(from_square))
+        self._tidy()
+        return []
+
+    def _carry_out(self, from_square, to_square, steps, captured):
+        """Check, then run the drags of one move; park the captured piece if there is a graveyard."""
+        for step in steps:
+            self.mover.check(step)
+
+        removed_by_hand = None
+        if captured is not None and self.graveyard is None and self.remove_by_hand:
+            removed_by_hand = chess.square_name(captured)
+            if self.remove_by_hand(removed_by_hand) is False:
+                raise ValueError("Move called off. Nothing was moved.")
+
+        done = 0
+        try:
+            for step in steps:
+                self.mover.run(step)
+                done += 1
+        except Exception as e:
+            raise MoveInterrupted(
+                self._interrupted(from_square, to_square, steps, done, removed_by_hand, e)
+            )
+
+        if captured is not None and self.graveyard is not None:
+            self.graveyard.park(self.board.piece_at(captured))
+
+    def _interrupted(self, from_square, to_square, steps, done, removed_by_hand, error):
         lines = [
             "The move %s %s stopped partway: %s"
-            % (chess.square_name(move.from_square).upper(), chess.square_name(move.to_square).upper(), error)
+            % (chess.square_name(from_square).upper(), chess.square_name(to_square).upper(), error)
         ]
         for i, step in enumerate(steps):
             state = "done" if i < done else ("may have stopped partway" if i == done else "not started")

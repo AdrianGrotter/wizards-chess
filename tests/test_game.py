@@ -347,3 +347,32 @@ def test_turn_can_be_set_after_editing():
     game = new_game()
     game.set_turn("black")
     assert game.move_between("e7", "e5") == chess.Move.from_uci("e7e5")
+
+
+def test_free_move_goes_anywhere_between_the_other_pieces():
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    game = Game(Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 3000, 1500))
+    game.free_move("a1", "a5")
+    assert game.board.piece_at(chess.A5).symbol() == "R"
+    assert game.board.piece_at(chess.A1) is None
+    assert game.board.turn == chess.WHITE
+    drag = machine.lines[machine.lines.index("M3 S1000") + 2:machine.lines.index("M5")]
+    assert drag == [
+        "G53 G1 X48.00 Y58.00 F1500",
+        "G53 G1 X48.00 Y160.00 F1500",
+        "G53 G1 X31.00 Y177.00 F1500",
+    ]
+
+
+def test_free_move_onto_a_piece_parks_it_first():
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    graveyard = Graveyard(ROWS)
+    game = Game(Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 3000, 1500), graveyard)
+    game.free_move("a1", "a8")
+    assert game.board.piece_at(chess.A8).symbol() == "R"
+    assert graveyard.parked["black"] == [((3.5, 8.0), chess.Piece.from_symbol("r"))]
+
+
+def test_free_move_from_an_empty_square_is_refused():
+    with pytest.raises(ValueError, match="There is no piece on E4"):
+        new_game().free_move("e4", "e5")

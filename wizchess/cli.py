@@ -196,12 +196,13 @@ def grid_pieces(board):
 def cmd_grid(cfg, machine, args):
     game = make_game(cfg, machine)
     came_from = None
+    rules = True
     print(render(grid_pieces(game.board), head_square(game.mover)))
     print(GRID_HELP)
     while True:
         side = "White" if game.board.turn == chess.WHITE else "Black"
         try:
-            command = parse_command(ask("%s> " % side))
+            command = parse_command(ask("%s> " % (side if rules else "Free")))
         except ValueError as e:
             print(e)
             continue
@@ -234,12 +235,23 @@ def cmd_grid(cfg, machine, args):
                 game.remove(command[1])
             elif kind == "turn":
                 game.set_turn(command[1])
+            elif kind == "rules":
+                rules = command[1] == "on"
+                notes.append(
+                    "Moves follow the chess rules again." if rules
+                    else "Rules are off: any piece can go to any square. Type 'rules on' to go back."
+                )
+                if rules:
+                    notes.extend("Note: %s." % p for p in game.problems())
             elif kind == "goto":
                 game.mover.goto(parse_square(command[1]))
                 machine.wait_until_idle()
             elif kind == "move":
                 _, start, end, promotion = command
-                notes = game.play_move(game.move_between(start, end, promotion))
+                if rules:
+                    notes = game.play_move(game.move_between(start, end, promotion))
+                else:
+                    notes = game.free_move(start, end)
                 came_from = start
             if kind in ("clear", "put", "remove", "turn"):
                 notes.extend("Note: %s." % p for p in game.problems())

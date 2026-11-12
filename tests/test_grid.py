@@ -69,3 +69,10 @@ def test_turn_and_unlock():
     assert parse_command("unlock") == ("unlock",)
     with pytest.raises(ValueError, match="Use turn with white or black"):
         parse_command("turn red")
+
+
+def test_rules_on_off():
+    assert parse_command("rules off") == ("rules", "off")
+    assert parse_command("Rules ON") == ("rules", "on")
+    with pytest.raises(ValueError, match="Use rules with on or off"):
+        parse_command("rules")

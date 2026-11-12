@@ -59,6 +59,14 @@ Once homing switches are installed, set `$22=1` on the engraver and
 - After a reply goes missing, the connection is no longer trusted and every command
   says to restart the tool.
 
+## Moving without rules
+
+`rules off` in the grid lets any piece go to any square (`A1 A8`), for testing and for
+fixing up the board. A piece on the target square is parked beside the board first (or
+lifted off by hand without a graveyard), every drag runs along the lines between squares,
+and whose turn it is stays unchanged. `rules on` switches the rules back on and points out
+anything about the position that a real game couldn't reach.
+
 ## Resetting the board
 
 `reset` in the grid drags every piece back to its starting square, along the lines

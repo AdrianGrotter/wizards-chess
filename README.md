@@ -128,7 +128,8 @@ full speed.
 
 ## Routing
 
-A piece goes straight to its target, and the empty head straight to the piece, whenever
+The empty head always goes straight to the piece it is fetching, passing under other
+pieces if they are in the way. A piece being dragged goes straight to its target whenever
 the straight path stays at least half a square from every other piece. That covers most
 moves: a pawn stepping forward, a queen along an open diagonal, a rook along an open file.
 

@@ -2,7 +2,7 @@ import pytest
 
 from wizchess.geometry import Geometry
 from wizchess.machine import FakeMachine
-from wizchess.mover import Mover, Step, route, travel_route
+from wizchess.mover import Mover, Step, route
 
 
 def test_direct_route():
@@ -35,29 +35,6 @@ def test_route_to_graveyard():
     ]
 
 
-def on_lines_except_ends(path):
-    return all(f % 1 == 0.5 or r % 1 == 0.5 for f, r in path[1:-1])
-
-
-def test_travel_between_squares_follows_the_lines():
-    path = travel_route((4, 1), (4, 3))
-    assert path == [(4, 1), (3.5, 1.5), (3.5, 2.5), (4, 3)]
-    assert on_lines_except_ends(path)
-
-
-def test_travel_from_the_parking_corner():
-    path = travel_route((-0.91, -0.91), (2, 4))
-    assert path == [(-0.91, -0.91), (-0.5, -0.5), (1.5, -0.5), (1.5, 3.5), (2, 4)]
-
-
-def test_travel_to_a_line_point():
-    assert travel_route((4, 3), (-0.5, -0.5)) == [(4, 3), (3.5, 2.5), (-0.5, 2.5), (-0.5, -0.5)]
-
-
-def test_travel_to_where_the_head_already_is():
-    assert travel_route((4, 3), (4, 3)) == [(4, 3)]
-
-
 def make_mover(machine):
     return Mover(machine, Geometry((31, 31), (269, 31), (31, 269)), 3000, 1500)
 
@@ -76,12 +53,12 @@ def test_mover_grabs_drags_and_releases():
     ]
 
 
-def test_head_travels_along_lines_to_the_piece():
+def test_head_travels_straight_to_the_piece_even_under_other_pieces():
     machine = FakeMachine((300, 300), 1000, echo=False)
     mover = make_mover(machine)
     machine.head = mover.geometry.square_mm("e2")
-    mover.goto((4, 3))
-    assert machine.lines == ["G53 G1 X150.00 Y82.00 F3000", "G53 G1 X150.00 Y116.00 F3000", "G53 G1 X167.00 Y133.00 F3000"]
+    mover.goto((4, 3), occupied={(4, 2)})
+    assert machine.lines == ["G53 G1 X167.00 Y133.00 F3000"]
     assert machine.head == (167, 133)
 
 
@@ -112,13 +89,12 @@ def test_parking_beside_the_board_is_allowed_when_asked():
     assert "M5" in machine.lines
 
 
-def test_park_goes_to_the_corner_along_the_lines():
+def test_park_goes_straight_to_the_corner():
     machine = FakeMachine((300, 300), 1000, echo=False)
     mover = make_mover(machine)
     machine.head = mover.geometry.square_mm("e4")
     mover.park()
-    assert machine.lines[-1] == "G53 G1 X0.00 Y0.00 F3000"
-    assert machine.lines[0] == "G53 G1 X150.00 Y116.00 F3000"
+    assert machine.lines == ["G53 G1 X0.00 Y0.00 F3000"]
     assert machine.head == (0, 0)
 
 
@@ -200,14 +176,3 @@ def test_auto_route_goes_straight_when_clear_and_through_gutters_when_blocked():
     assert mover.path(knight, occupied=set()) == [(6, 0), (5, 2)]
     assert mover.path(knight, occupied={(6, 1)}) == route((6, 0), (5, 2), via_edges=True)
     assert mover.path(knight) == route((6, 0), (5, 2), via_edges=True)
-
-
-def test_head_goes_straight_when_nothing_is_in_the_way():
-    machine = FakeMachine((300, 300), 1000, echo=False)
-    mover = make_mover(machine)
-    machine.head = mover.geometry.square_mm("e2")
-    mover.goto((4, 5), occupied={(3, 1), (5, 1)})
-    assert machine.lines == ["G53 G1 X167.00 Y201.00 F3000"]
-    machine.lines.clear()
-    mover.goto((4, 1), occupied={(4, 3)})
-    assert len(machine.lines) > 1

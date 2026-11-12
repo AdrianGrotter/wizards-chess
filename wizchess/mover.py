@@ -1,5 +1,3 @@
-import math
-
 from .geometry import BOARD_EDGE_HIGH, BOARD_EDGE_LOW, on_board
 
 
@@ -19,15 +17,6 @@ def _sign(value):
 
 def _toward_centre(value):
     return 1 if value < 3.5 else -1
-
-
-def _clamp(value):
-    return max(BOARD_EDGE_LOW, min(BOARD_EDGE_HIGH, value))
-
-
-def _on_line(value):
-    """Whether value lies on a line between squares (…, -0.5, 0.5, 1.5, …)."""
-    return abs((value + 0.5) - round(value + 0.5)) < TOLERANCE
 
 
 def route(start, end, via_edges=False):
@@ -90,40 +79,6 @@ def is_clear(path, occupied):
         for a, b in zip(path, path[1:])
         for p in occupied
     )
-
-
-def _line_toward(position, target):
-    """The nearest line between squares from position, on target's side."""
-    if _on_line(position):
-        return position
-    if target > position or (target == position and position < 3.5):
-        return _clamp(math.floor(position) + 0.5)
-    return _clamp(math.ceil(position) - 0.5)
-
-
-def _line_beside(target, line):
-    """The line next to target on the side facing line."""
-    if _on_line(target):
-        return target
-    side = _sign(target - line)
-    return target - 0.5 * side if side else line
-
-
-def travel_route(start, end):
-    """Grid points for moving the empty head from start to end.
-
-    The head first steps onto the nearest line between squares, follows the
-    lines, and only leaves them for the last diagonal step onto end, so it
-    never passes straight under another piece.
-    """
-    start = (round(start[0], 4), round(start[1], 4))
-    end = (float(end[0]), float(end[1]))
-    if start == end:
-        return [start]
-    on_line = (_line_toward(start[0], end[0]), _line_toward(start[1], end[1]))
-    near_end = (_line_beside(end[0], on_line[0]), _line_beside(end[1], on_line[1]))
-    path = [start, on_line, (near_end[0], on_line[1]), near_end, end]
-    return [p for i, p in enumerate(path) if i == 0 or p != path[i - 1]]
 
 
 class Step:
@@ -203,24 +158,15 @@ class Mover:
         self._check(self.path(step), not step.leaves_board)
 
     def goto(self, point, occupied=None):
-        """Move the head, magnet off, to a grid point.
+        """Move the head, magnet off, straight to a grid point.
 
-        It goes straight when that keeps clear of every occupied grid point,
-        and along the gutters between squares otherwise or when occupancy is
-        unknown.
+        With the magnet off the head may pass under other pieces, so occupied
+        is not used.
         """
         point = tuple(point)
-        here = self.head_grid()
-        if here is None:
-            path = [point]
-        elif occupied is not None and is_clear([here, point], set(occupied) - {point}):
-            path = [point]
-        else:
-            path = travel_route(here, point)[1:]
-        self._check(path, keep_on_board=False)
-        for p in path:
-            x, y = self.geometry.to_mm(p)
-            self.machine.move_to(x, y, self.travel_feed)
+        self._check([point], keep_on_board=False)
+        x, y = self.geometry.to_mm(point)
+        self.machine.move_to(x, y, self.travel_feed)
 
     def park(self, occupied=None):
         """Move the head, magnet off, to the machine's (0, 0) corner."""
@@ -228,8 +174,6 @@ class Mover:
             raise ValueError(
                 "The head's position is unknown, so it can't be parked. Push it into its corner by hand."
             )
-        corner = self.geometry.to_grid((0.0, 0.0))
-        self.goto((_clamp(corner[0]), _clamp(corner[1])), occupied)
         self.machine.move_to(0, 0, self.travel_feed)
         self.machine.wait_until_idle()
 

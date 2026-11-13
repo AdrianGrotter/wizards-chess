@@ -241,3 +241,23 @@ def test_unreadable_saved_grid_starts_fresh(tmp_path):
     app = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), str(path))
     assert app.state()["pieces"]["e2"] == "P"
     assert app.state()["log"][-1]["error"]
+
+
+def test_outline_pulls_a_piece_round_the_corners_until_ended():
+    app = started()
+    wait_for(lambda: not app.busy)
+    assert app.submit("outline") == (True, "")
+    assert "Put a piece there" in answer(app, True)
+    wait_for(lambda: app.question is not None and "Next corner" in app.question["text"])
+    app.give_answer(True)
+    wait_for(lambda: app.question is not None and app.question["text"].startswith("Paused at"))
+    app.give_answer(True)
+    wait_for(lambda: app.question is not None and "Next corner" in app.question["text"])
+    app.give_answer(False)
+    wait_for(lambda: not app.busy)
+    lines = app.machine.lines
+    drags = [line for line in lines if line.endswith("F3000")]
+    assert drags[:2] == ["G53 G1 X34.50 Y275.50 F3000", "G53 G1 X265.50 Y275.50 F3000"]
+    assert lines.index("M3 S1000") < lines.index(drags[0]) and "M5" in lines[lines.index(drags[-1]):]
+    assert "ended at" in app.state()["log"][-1]["text"]
+    assert app.state()["pieces"]["a1"] == "R"

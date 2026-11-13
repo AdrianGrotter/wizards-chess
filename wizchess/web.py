@@ -21,7 +21,8 @@ PAGE_PATH = __file__.rsplit("/", 1)[0] + "/page.html"
 LOG_LENGTH = 40
 SUGGESTED_ACCELERATION = 500
 HIGH_ACCELERATION = 1000
-MOVING_COMMANDS = ("move", "goto", "park")
+MOVING_COMMANDS = ("move", "goto", "park", "outline")
+OUTLINE_CORNERS = ("a1", "a8", "h8", "h1")
 
 
 class App:
@@ -79,8 +80,8 @@ class App:
     def submit(self, text):
         """Queue a typed command. Returns (accepted, message for the player)."""
         text = text.strip()
-        if text.lower() == "reconnect":
-            command = ("reconnect",)
+        if text.lower() in ("reconnect", "outline"):
+            command = (text.lower(),)
         else:
             try:
                 command = parse_command(text)
@@ -250,6 +251,49 @@ class App:
         self.ready = True
         self.say("Connected to the engraver. Ready to play.")
 
+    def _outline(self):
+        """Pull a piece round and round the corner squares, to check the board lines up.
+
+        The players pause or end the run from the page; either takes effect
+        at the next corner. The grid is left alone.
+        """
+        mover = self.session.game.mover
+        machine = self.machine
+        feed = self.cfg.get("outline_feed", 3000)
+        mover.goto((0, 0))
+        machine.wait_until_idle()
+        if not self.ask("The magnet is under A1. Put a piece there to pull round the corners.", "Start", "Cancel"):
+            return
+        corner = "a1"
+        machine.magnet(True)
+        try:
+            machine.dwell(mover.grab_seconds)
+            i = 0
+            while True:
+                i += 1
+                corner = OUTLINE_CORNERS[i % len(OUTLINE_CORNERS)]
+                self.answer = None
+                self.question = {
+                    "text": "Pulling the piece round the corners. Next corner: %s." % corner.upper(),
+                    "yes": "Pause there", "no": "End there",
+                }
+                x, y = mover.geometry.square_mm(corner)
+                machine.move_to(x, y, feed)
+                machine.wait_until_idle()
+                if self.answer is False:
+                    break
+                if self.answer is True and not self.ask("Paused at %s." % corner.upper(), "Carry on", "End"):
+                    break
+        finally:
+            self.question = None
+            try:
+                machine.magnet(False)
+            except MachineError:
+                pass
+        machine.dwell(mover.grab_seconds)
+        machine.wait_until_idle()
+        self.say("The run round the corners ended at %s. The grid was not changed." % corner.upper())
+
     def _carry_out(self, command):
         kind = command[0]
         try:
@@ -263,6 +307,9 @@ class App:
                 raise ValueError(
                     "The head's position hasn't been confirmed, so nothing can move. Press Reconnect."
                 )
+            if kind == "outline":
+                self._outline()
+                return
             for note in self.session.execute(command):
                 self.say(note)
         except (ValueError, MachineError) as e:

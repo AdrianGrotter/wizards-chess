@@ -56,7 +56,7 @@ def make_machine(cfg, fake):
         return ChipMachine(cfg.get("chip", "http://192.168.4.1"), **common)
     from .grbl import GrblMachine
 
-    return GrblMachine(cfg.get("port", "auto"), cfg["baud"], link=cfg.get("link", "usb"), **common)
+    return GrblMachine(cfg.get("port", "auto"), cfg["baud"], **common)
 
 
 def make_mover(cfg, machine):
@@ -133,7 +133,7 @@ def cmd_info(cfg, machine, args):
         machine.connect()
         print("Board         ESP32 at %s" % machine.url)
     else:
-        print("Port          %s (%s)" % (machine.serial.port, "ESP32 WiFi bridge" if machine.link == "wifi" else "engraver USB"))
+        print("Port          %s (engraver USB)" % machine.serial.port)
         for line in machine.info():
             print(line)
     s = machine.settings()
@@ -188,27 +188,6 @@ def make_game(cfg, machine):
         Graveyard.from_config(graveyard) if graveyard else None,
         remove_by_hand=remove_by_hand,
     )
-
-
-def cmd_play(cfg, machine, args):
-    game = make_game(cfg, machine)
-    print("Type moves like e2e4 or Nf3. 'board' shows the board, 'quit' leaves.")
-    while not game.board.is_game_over():
-        side = "White" if game.board.turn else "Black"
-        text = ask("%s> " % side).strip()
-        if text in ("quit", "exit"):
-            break
-        if text == "board":
-            print(game.board)
-            continue
-        if not text:
-            continue
-        try:
-            for note in game.play(text):
-                print(note)
-        except (ValueError, MachineError) as e:
-            print(e)
-    finish(game.mover, game.occupied())
 
 
 def grid_pieces(board):
@@ -409,7 +388,6 @@ COMMANDS = {
     "goto": cmd_goto,
     "move": cmd_move,
     "home": cmd_home,
-    "play": cmd_play,
     "grid": cmd_grid,
     "jog": cmd_jog,
     "outline": cmd_outline,
@@ -432,7 +410,6 @@ def main(argv=None):
     p.add_argument("end")
     p.add_argument("--edges", action="store_true", help="travel along the lines between squares")
     sub.add_parser("home", help="run homing ($H), needs homing switches")
-    sub.add_parser("play", help="play a game by typing moves")
     sub.add_parser("grid", help="interactive grid: type A4 C2 to move a piece, chess rules enforced")
     sub.add_parser("jog", help="interactive session: move the head, drag pieces, save calibration points")
     p = sub.add_parser("outline", help="visit the corner squares A1, A8, H8, H1 in a circle, one per Enter")

@@ -4,8 +4,7 @@ config.json holds the WiFi details and the mode. In "game" mode the whole
 game runs here and is played from a web page the ESP32 serves; game.json is
 the project's config.json with the board's measurements. In "api" mode the
 game runs on another device, which sends the ESP32 requests to move the
-head, switch the magnet and play sounds. In "bridge" mode the ESP32 only
-carries G-code between the laptop's USB cable and the engraver.
+head, switch the magnet and play sounds.
 """
 import json
 import sys
@@ -101,12 +100,7 @@ def main():
             say("%s, retrying" % e)
             time.sleep(2)
     say("WiFi %s, address %s" % (config["wifi_ssid"], ip))
-    if config.get("mode", "game") == "bridge":
-        import bridge
-
-        bridge.run(config, say)
-    else:
-        play(config, ip)
+    play(config, ip)
 
 
 main()

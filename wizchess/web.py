@@ -342,10 +342,12 @@ class App:
         try:
             machine.dwell(mover.grab_seconds)
             i = 0
+            # An answer stays until it is read here, so one given just as a
+            # lap ends still counts at the next corner.
+            self.answer = None
             while True:
                 i += 1
                 corner = OUTLINE_CORNERS[i % len(OUTLINE_CORNERS)]
-                self.answer = None
                 self.question = {
                     "text": "Pulling the piece round the corners. Next corner: %s." % corner.upper(),
                     "yes": "Pause there", "no": "End there",
@@ -353,10 +355,13 @@ class App:
                 x, y = mover.geometry.square_mm(corner)
                 machine.move_to(x, y, feed)
                 machine.wait_until_idle()
-                if self.answer is False:
+                answer, self.answer = self.answer, None
+                if answer is False:
                     break
-                if self.answer is True and not self.ask("Paused at %s." % corner.upper(), "Carry on", "End"):
-                    break
+                if answer is True:
+                    if not self.ask("Paused at %s." % corner.upper(), "Carry on", "End"):
+                        break
+                    self.answer = None
         finally:
             self.question = None
             try:

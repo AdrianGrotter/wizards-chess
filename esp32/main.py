@@ -2,9 +2,10 @@
 
 config.json holds the WiFi details and the mode. In "game" mode the whole
 game runs here and is played from a web page the ESP32 serves; game.json is
-the project's config.json with the board's measurements. In "bridge" mode
-the ESP32 only carries G-code between the laptop's USB cable and the
-engraver.
+the project's config.json with the board's measurements. In "api" mode the
+game runs on another device, which sends the ESP32 requests to move the
+head, switch the magnet and play sounds. In "bridge" mode the ESP32 only
+carries G-code between the laptop's USB cable and the engraver.
 """
 import json
 import sys
@@ -50,10 +51,13 @@ def open_access_point(ssid, password):
 
 
 def play(config, ip):
+    """Run the game here ("game" mode) or serve another device that runs it ("api" mode)."""
     import _thread
 
-    from wizchess import web
     from wizchess.wifi import WifiMachine
+
+    serving = config.get("mode", "game") == "api"
+    what = "The board takes requests" if serving else "Play"
 
     game = load("game.json")
     machine = WifiMachine(
@@ -61,10 +65,10 @@ def play(config, ip):
         config.get("http_port", 80), config.get("websocket_port", 81),
     )
     _thread.stack_size(24 * 1024)
-    say("Play at http://%s/ (or http://%s.local/)" % (ip, HOSTNAME))
+    say("%s at http://%s/ (or http://%s.local/)" % (what, ip, HOSTNAME))
     if config.get("ap_ssid"):
         ap_ip = open_access_point(config["ap_ssid"], config["ap_password"])
-        say("Or join the WiFi network %s and play at http://%s/" % (config["ap_ssid"], ap_ip))
+        say("Or join the WiFi network %s: http://%s/" % (config["ap_ssid"], ap_ip))
     sounds = None
     if game.get("sound"):
         from dfplayer import Player
@@ -77,7 +81,14 @@ def play(config, ip):
 
         pin = Pin(game["magnet_sensor"]["pin"], Pin.IN, Pin.PULL_UP)
         magnet_sensor = lambda: pin.value() == 0
-    web.run(game, machine, 80, state_path="state.json", sounds=sounds, magnet_sensor=magnet_sensor)
+    if serving:
+        from wizchess import boardapi
+
+        boardapi.run(machine, 80, sounds=sounds, magnet_sensor=magnet_sensor)
+    else:
+        from wizchess import web
+
+        web.run(game, machine, 80, state_path="state.json", sounds=sounds, magnet_sensor=magnet_sensor)
 
 
 def main():

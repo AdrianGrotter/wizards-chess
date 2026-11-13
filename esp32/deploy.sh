@@ -16,7 +16,7 @@ if [ "$port" != "auto" ]; then
 fi
 
 # The game's own modules; cli, config and grbl need a laptop.
-modules=(__init__ geometry machine mover game reset grid session sound protocol wifi web)
+modules=(__init__ geometry machine mover game reset grid session sound protocol wifi web boardapi)
 copies=()
 for module in "${modules[@]}"; do
   copies+=(+ cp "../wizchess/$module.py" ":wizchess/$module.py")

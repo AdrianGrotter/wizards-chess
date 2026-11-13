@@ -121,6 +121,7 @@ class App:
         if game.graveyard is not None:
             for color in parked:
                 parked[color] = "".join(piece.symbol() for _, piece in game.graveyard.parked[color])
+        felt = None if self.magnet_sensor is None else self.magnet_sensor()
         return {
             "pieces": {chess.square_name(sq): p.symbol() for sq, p in game.board.piece_map().items()},
             "parked": parked,
@@ -132,7 +133,7 @@ class App:
             "busy": self.busy,
             "ready": self.ready,
             "question": self.question,
-            "sensor": None if self.magnet_sensor is None else bool(self.magnet_sensor()),
+            "sensor": None if felt is None else bool(felt),
             "log": self.log,
         }
 
@@ -427,8 +428,8 @@ def handle(conn, app):
         _respond(conn, b"Not found", "text/plain", "404 Not Found")
 
 
-def serve(app, port, host="0.0.0.0"):
-    """Answer the page's requests forever, one at a time."""
+def serve(app, port, host="0.0.0.0", handle=handle):
+    """Answer requests forever, one at a time."""
     server = socket.socket()
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(socket.getaddrinfo(host, port)[0][-1])

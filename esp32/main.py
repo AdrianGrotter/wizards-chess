@@ -31,6 +31,12 @@ def connect_wifi(ssid, password, seconds=20):
         pass
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
+    try:
+        # With power saving on, the radio naps between the shared network's
+        # beacons, and devices trying to join the ESP32's own network get no answer.
+        wlan.config(pm=network.WLAN.PM_NONE)
+    except (AttributeError, ValueError, TypeError):
+        pass
     if not wlan.isconnected():
         wlan.connect(ssid, password)
         deadline = time.ticks_add(time.ticks_ms(), seconds * 1000)

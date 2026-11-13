@@ -380,10 +380,15 @@ def cmd_web(cfg, machine, args):
 
     shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
     print("Open http://%s:%d/ in a browser. Ctrl-C ends the program." % (shown, args.port))
+    from . import voice
+
+    def make_voice(app):
+        return voice.Listener(voice.OwnBoard(app), args.model, args.level, args.microphone)
+
     if getattr(machine, "keeps_position", False):
-        web.run(cfg, machine, args.port, args.host, "state.json", machine.sounds(), machine.sensor)
+        web.run(cfg, machine, args.port, args.host, "state.json", machine.sounds(), machine.sensor, make_voice)
     else:
-        web.run(cfg, machine, args.port, args.host)
+        web.run(cfg, machine, args.port, args.host, make_voice=make_voice)
 
 
 COMMANDS = {
@@ -427,6 +432,9 @@ def main(argv=None):
         "--host", default="127.0.0.1",
         help="address to listen on; 0.0.0.0 lets other devices on the network use the page",
     )
+    p.add_argument("--model", default="models/ggml-small.en.bin", help="whisper.cpp model file, for voice")
+    p.add_argument("--level", type=int, default=700, help="how loud speech must be, 0 to 32767 (default 700)")
+    p.add_argument("--microphone", type=int, default=None, help="number of the microphone to use")
 
     p = sub.add_parser("voice", help="play by talking: listens on the microphone and talks to the board's web page")
     p.add_argument("--board", default="http://localhost:8000", help="address of the board's web page")

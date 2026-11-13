@@ -184,6 +184,8 @@ class Interpreter:
 
         if any(t in CASTLE for t in tokens):
             return self._castle(tokens, pieces, legal)
+        if len(squares) >= 2 and squares[0] == squares[1]:
+            return None
         if len(squares) >= 2:
             if len(kinds) > 1 and promotion is None:
                 promotion = kinds[-1]

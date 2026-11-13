@@ -65,7 +65,7 @@ def test_moves(text, moves, command):
 
 @pytest.mark.parametrize("text", [
     "", "Thank you.", "I waited for a four hour drive", "what a nice knight", "yes", "no way",
-    "he took my queen yesterday", "the", "queen",
+    "he took my queen yesterday", "the", "queen", "A3, A3.",
 ])
 def test_chatter_is_ignored(text):
     assert hear(text) is None

@@ -68,16 +68,18 @@ between runs.
 
 ### Playing by voice
 
-A laptop with a microphone can listen and pass on what is said, so a game runs like a
-conversation. Start it in a second terminal, next to the web page's program:
+The laptop that runs the game can listen on its microphone and pass on what is said, so
+a game runs like a conversation. Tick **Voice** on the page to switch it on. The page
+shows what it is doing, the last sentences it heard with what became of each, and its
+latest reply. The microphone is the laptop's, also when the page is open on a phone.
+
+`web` takes `--level` and `--microphone` for it. The same listener runs on its own from
+a terminal, against a page anywhere, such as an ESP32 in game mode:
 
 ```sh
-python -m wizchess voice           # talks to the page on this laptop, port 8000
+python -m wizchess voice --board http://192.168.4.1
 python -m wizchess voice --typed   # type the sentences, no microphone
 ```
-
-It works through the game's web page, so `--board` can point it at a page anywhere,
-such as an ESP32 in game mode: `--board http://192.168.4.1`.
 
 Speech is recognised on the laptop itself by whisper.cpp, with no internet. It needs a
 model file once, in `models/` (git-ignored):
@@ -103,8 +105,8 @@ What it understands:
 It listens all the time, so a sentence only counts when every word in it is chess talk;
 anything else is taken for chatter. It says each move back as the move starts, asks
 which piece when two could make the move ("Which knight: the one on B1 or F3?"), and
-reads the board's refusals and "check" aloud. The terminal shows every sentence it
-heard and what it did with it.
+reads the board's refusals and "check" aloud. The page and the terminal show every
+sentence it heard and what it did with it.
 
 Letters like B, D and E sound alike. When it mishears a square, name both squares or use
 the spelling alphabet: alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel.

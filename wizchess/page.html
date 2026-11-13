@@ -125,6 +125,14 @@
   .small { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
   #last { min-height: 1.5em; font-size: 15px; color: var(--muted); white-space: pre-wrap; }
   #last.error { color: #ff9a92; }
+  #voice-box { display: none; }
+  #voice-box.shown { display: block; }
+  #voice-status { color: var(--muted); font-size: 14px; margin: 6px 0; }
+  #voice-heard { font-size: 14px; }
+  #voice-heard div { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
+  #voice-heard div span:last-child { color: var(--muted); text-align: right; }
+  #voice-heard div.ignored { opacity: .5; }
+  #voice-said { color: var(--gold); font-size: 14px; min-height: 1.3em; }
   #sensor { display: none; color: var(--muted); }
   #sensor.shown { display: inline-flex; gap: 8px; align-items: center; }
   #sensor i { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--muted); }
@@ -204,6 +212,12 @@
           <label><input type="checkbox" id="sound" checked> Sound</label>
         </div>
         <div class="row"><span id="sensor"><i></i><span id="sensor-text"></span></span></div>
+        <div id="voice-box">
+          <div class="row"><label><input type="checkbox" id="voice"> Voice: listen on the computer's microphone</label></div>
+          <div id="voice-status"></div>
+          <div id="voice-heard"></div>
+          <div id="voice-said"></div>
+        </div>
         <div class="row">
           <label>Promote to
             <select id="promo"><option value="q">queen</option><option value="r">rook</option>
@@ -286,6 +300,7 @@ function draw() {
   $("stop").classList.toggle("live", state.busy);
   $("free").checked = !state.rules;
   $("sensor").className = state.sensor == null ? "" : state.sensor ? "shown on" : "shown";
+  showVoice(state.voice);
   $("sensor-text").textContent = state.sensor ? "Sensor: magnet" : "Sensor: no magnet";
   for (const color of ["white", "black"]) {
     const row = $("cap-" + color);
@@ -515,6 +530,27 @@ function notice(text, error) {
   draw();
 }
 
+let voiceShown = "";
+function showVoice(voice) {
+  $("voice-box").className = voice ? "shown" : "";
+  if (!voice) return;
+  $("voice").checked = voice.on;
+  $("voice-status").textContent = voice.status;
+  $("voice-said").textContent = voice.on && voice.said ? "\u201c" + voice.said + "\u201d" : "";
+  const key = voice.heard.map(h => h.n).join(",");
+  if (key === voiceShown) return;
+  voiceShown = key;
+  $("voice-heard").replaceChildren(...voice.heard.map(h => {
+    const row = document.createElement("div");
+    if (h.did === "ignored") row.className = "ignored";
+    const text = document.createElement("span"), did = document.createElement("span");
+    text.textContent = h.text;
+    did.textContent = h.did;
+    row.append(text, did);
+    return row;
+  }));
+}
+
 async function post(path, body) {
   try {
     const reply = await (await fetch(path, {method: "POST", body})).json();
@@ -599,6 +635,7 @@ for (const button of document.querySelectorAll("button[data-cmd]")) {
 $("stop").addEventListener("click", () => post("/stop", ""));
 $("yes").addEventListener("click", () => post("/answer", "yes").then(refresh));
 $("no").addEventListener("click", () => post("/answer", "no").then(refresh));
+$("voice").addEventListener("change", e => post("/voice", e.target.checked ? "on" : "off").then(refresh));
 $("free").addEventListener("change", e => command("rules " + (e.target.checked ? "off" : "on")));
 $("typed").addEventListener("submit", e => {
   e.preventDefault();

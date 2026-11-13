@@ -99,6 +99,30 @@ def test_a_game_by_voice_from_a_question_to_checkmate():
     assert app.state()["pieces"]["h4"] == "q"
 
 
+def test_the_page_switches_the_microphone_and_shows_what_was_heard():
+    app = web.App(CFG, FakeMachine((300, 320), 1000, echo=False))
+    threading.Thread(target=app.run, daemon=True).start()
+    wait_for(lambda: app.pending is None and not app.busy)
+    assert app.state()["voice"] is None
+    listener = voice.Listener(voice.OwnBoard(app), "no-such-model.bin", aloud=False)
+    app.voice = listener
+    assert app.state()["voice"] == {"on": False, "status": "Off", "heard": [], "said": ""}
+
+    listener.hear("Knight to f3.")
+    listener.hear("what a lovely day")
+    wait_for(lambda: app.pending is None and not app.busy)
+    shown = app.state()["voice"]
+    assert [(h["text"], h["did"]) for h in shown["heard"]] == [
+        ("Knight to f3.", "sent 'g1 f3'"), ("what a lovely day", "ignored"),
+    ]
+    assert shown["said"] == "Knight to F3."
+    assert app.state()["pieces"]["f3"] == "N"
+
+    listener.switch(True)
+    wait_for(lambda: not listener.on)
+    assert "speech model no-such-model.bin is missing" in listener.status
+
+
 def test_chatter_and_refusals_are_handled_aloud():
     app, conversation, said = talking()
     settle(app, conversation)

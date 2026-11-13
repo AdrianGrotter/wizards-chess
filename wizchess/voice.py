@@ -5,8 +5,10 @@ turns chess talk into commands for the board's web page (see heard.py), and
 answers aloud. The board itself can be the ESP32 or `wizchess web`.
 """
 import array
+import atexit
 import io
 import json
+import os
 import queue
 import shutil
 import signal
@@ -238,6 +240,138 @@ class Conversation:
             self.status = status
 
 
+class OwnBoard:
+    """A game running in this same program, for a Conversation to talk to."""
+
+    url = "this program"
+
+    def __init__(self, app):
+        self.app = app
+
+    def state(self):
+        return self.app.state()
+
+    def command(self, line):
+        return self.app.submit(line)
+
+    def answer(self, yes):
+        self.app.give_answer(yes)
+
+    def stop(self):
+        self.app.stop()
+
+
+class Listener:
+    """The microphone, switched on and off while the program runs.
+
+    state() is what the web page shows: whether it is on, what it is doing,
+    and the last sentences it heard with what became of each.
+    """
+
+    SHOWN = 6
+
+    def __init__(self, board, model, level=700, microphone=None, aloud=True):
+        self.model = model
+        self.level = level
+        self.microphone = microphone
+        self.voice = Voice(aloud)
+        self.conversation = Conversation(board, self._say)
+        self.on = False
+        self.status = "Off"
+        self.heard = []
+        self.count = 0
+        self.said = ""
+        self.thread = None
+        self.recogniser = None
+        atexit.register(self._close)
+
+    def _say(self, text):
+        self.said = text
+        self.voice.say(text)
+
+    def state(self):
+        return {"on": self.on, "status": self.status, "heard": self.heard, "said": self.said}
+
+    def switch(self, on):
+        if on and not self.on:
+            self.on = True
+            self.status = "Starting..."
+            self.thread = threading.Thread(target=self._run, daemon=True)
+            self.thread.start()
+        elif not on:
+            self.on = False
+            self.status = "Off"
+
+    def hear(self, text):
+        """Act on one written-down sentence and remember it for the page."""
+        try:
+            did = self.conversation.heard(text)
+        except (OSError, ValueError):
+            did = "no answer from the board"
+        self.count += 1
+        self.heard = (self.heard + [{"n": self.count, "text": text, "did": did}])[-self.SHOWN:]
+        print("heard: %s -> %s" % (text, did))
+
+    def _watch(self):
+        while self.on:
+            try:
+                self.conversation.watch()
+            except (OSError, ValueError):
+                pass
+            time.sleep(0.7)
+
+    def _close(self):
+        if self.recogniser is not None:
+            self.recogniser.close()
+            self.recogniser = None
+
+    def _run(self):
+        try:
+            if not os.path.exists(self.model):
+                raise ValueError(
+                    "The speech model %s is missing. 'Playing by voice' in the manual says how to get it."
+                    % self.model
+                )
+            try:
+                import sounddevice
+            except ImportError:
+                raise ValueError("The microphone needs the sounddevice package. Run this inside `nix develop`.")
+            if self.recogniser is None:
+                self.status = "Loading the speech recogniser..."
+                self.recogniser = Recogniser(self.model)
+            blocks = queue.Queue()
+            segmenter = Segmenter(self.level)
+            try:
+                stream = sounddevice.RawInputStream(
+                    samplerate=RATE, blocksize=BLOCK, channels=1, dtype="int16", device=self.microphone,
+                    callback=lambda data, frames, when, status: blocks.put(bytes(data)),
+                )
+            except Exception as e:
+                raise ValueError("The microphone could not be opened: %s" % e)
+            with stream:
+                self.status = "Listening. Say a move, like: knight to f3."
+                threading.Thread(target=self._watch, daemon=True).start()
+                while self.on:
+                    try:
+                        block = blocks.get(timeout=0.3)
+                    except queue.Empty:
+                        continue
+                    if self.voice.speaking:
+                        segmenter.reset()
+                        continue
+                    sentence = segmenter.feed(block)
+                    if sentence is None:
+                        continue
+                    text = self.recogniser.write_down(sentence)
+                    if text and self.on:
+                        self.hear(text)
+            self.status = "Off"
+        except (ValueError, OSError) as e:
+            self.status = str(e)
+        finally:
+            self.on = False
+
+
 def _watching(conversation, pause=0.7):
     reachable = True
     while True:
@@ -268,11 +402,9 @@ def run(url, model, typed=False, aloud=True, level=700, microphone=None):
             "No board answers at %s. Start it first (python -m wizchess web), or give its "
             "address with --board." % url
         )
-    voice = Voice(aloud)
-    conversation = Conversation(board, voice.say)
-    threading.Thread(target=_watching, args=(conversation,), daemon=True).start()
-
     if typed:
+        conversation = Conversation(board, Voice(aloud).say)
+        threading.Thread(target=_watching, args=(conversation,), daemon=True).start()
         print("Type what you would say, like: knight to f3. Ctrl-D ends.")
         while True:
             try:
@@ -280,32 +412,14 @@ def run(url, model, typed=False, aloud=True, level=700, microphone=None):
             except EOFError:
                 return
 
-    try:
-        import sounddevice
-    except ImportError:
-        raise ValueError("The microphone needs the sounddevice package. Run this inside `nix develop`.")
-    print("Loading the speech recogniser...")
     # An ordinary kill must still shut the recogniser down with this program.
     signal.signal(signal.SIGTERM, lambda number, frame: sys.exit(0))
-    recogniser = Recogniser(model)
-    blocks = queue.Queue()
-    segmenter = Segmenter(level)
-    try:
-        with sounddevice.RawInputStream(
-            samplerate=RATE, blocksize=BLOCK, channels=1, dtype="int16", device=microphone,
-            callback=lambda data, frames, when, status: blocks.put(bytes(data)),
-        ):
-            print("Listening. Say a move, like: knight to f3. Ctrl-C ends.")
-            while True:
-                block = blocks.get()
-                if voice.speaking:
-                    segmenter.reset()
-                    continue
-                sentence = segmenter.feed(block)
-                if sentence is None:
-                    continue
-                text = recogniser.write_down(sentence)
-                if text:
-                    _act(conversation, text)
-    finally:
-        recogniser.close()
+    listener = Listener(board, model, level, microphone, aloud)
+    listener.switch(True)
+    shown = None
+    while listener.on:
+        if listener.status != shown:
+            shown = listener.status
+            print(shown)
+        time.sleep(0.2)
+    raise ValueError(listener.status)

@@ -53,6 +53,7 @@ class App:
         self.session = GridSession(game, cfg.get("slow_feed", 1500), self.ask, sounds)
         self.sounds = self.session.sounds
         self.magnet_sensor = magnet_sensor
+        self.voice = None
         self.lock = _thread.allocate_lock()
         self.pending = None
         self.busy = True
@@ -137,6 +138,7 @@ class App:
             "ready": self.ready,
             "question": self.question,
             "sensor": None if felt is None else bool(felt),
+            "voice": None if self.voice is None else self.voice.state(),
             "log": self.log,
         }
 
@@ -390,6 +392,9 @@ def handle(conn, app):
     elif method == "POST" and path == "/answer":
         app.give_answer(body.strip() == "yes")
         respond(conn, {"ok": True, "message": ""})
+    elif method == "POST" and path == "/voice" and app.voice is not None:
+        app.voice.switch(body.strip() == "on")
+        respond(conn, {"ok": True, "message": ""})
     elif method == "POST" and path == "/stop":
         accepted, message = app.stop()
         respond(conn, {"ok": accepted, "message": message})
@@ -397,8 +402,14 @@ def handle(conn, app):
         respond(conn, b"Not found", "text/plain", "404 Not Found")
 
 
-def run(cfg, machine, port, host="0.0.0.0", state_path=None, sounds=None, magnet_sensor=None):
-    """Serve the page and play until the program is ended."""
+def run(cfg, machine, port, host="0.0.0.0", state_path=None, sounds=None, magnet_sensor=None, make_voice=None):
+    """Serve the page and play until the program is ended.
+
+    make_voice(app), when given, returns the microphone listener that the
+    page can switch on and off (see voice.Listener).
+    """
     app = App(cfg, machine, state_path, sounds, magnet_sensor)
+    if make_voice is not None:
+        app.voice = make_voice(app)
     _thread.start_new_thread(serve, (app, port, host, handle))
     app.run()

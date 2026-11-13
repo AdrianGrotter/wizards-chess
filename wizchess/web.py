@@ -5,7 +5,6 @@ Runs under both Python (on a laptop) and MicroPython (on the ESP32).
 import _thread
 import json
 import os
-import socket
 import time
 
 import chess
@@ -15,6 +14,7 @@ from .geometry import Geometry
 from .grid import GRID_HELP, parse_command
 from .machine import FakeMachine, MachineError
 from .mover import Mover
+from .server import read_request, respond, serve
 from .session import GridSession
 
 PAGE_PATH = __file__.rsplit("/", 1)[0] + "/page.html"
@@ -234,6 +234,8 @@ class App:
             return
         if hasattr(machine, "connect"):
             machine.connect()
+            if getattr(machine, "was_paused", False):
+                self.say("The engraver had been left paused. The pause was ended and its unfinished moves dropped.")
         elif machine.out_of_step:
             raise MachineError("The connection to the engraver is out of step. Quit and start the program again.")
         else:
@@ -369,87 +371,31 @@ class App:
                 self._carry_out(command)
 
 
-def _read_request(conn):
-    data = b""
-    while b"\r\n\r\n" not in data:
-        chunk = conn.recv(512)
-        if not chunk or len(data) > 8192:
-            return None
-        data += chunk
-    split = data.index(b"\r\n\r\n")
-    lines = data[:split].decode().split("\r\n")
-    body = data[split + 4:]
-    words = lines[0].split(" ")
-    if len(words) < 2:
-        return None
-    length = 0
-    for line in lines[1:]:
-        name, _, value = line.partition(":")
-        if name.strip().lower() == "content-length":
-            length = int(value.strip())
-    while len(body) < length:
-        chunk = conn.recv(512)
-        if not chunk:
-            break
-        body += chunk
-    return words[0], words[1].split("?")[0], body.decode()
-
-
-def _respond(conn, body, content_type="application/json", status="200 OK"):
-    if not isinstance(body, bytes):
-        body = json.dumps(body).encode()
-    conn.sendall(
-        ("HTTP/1.0 %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n"
-         "Cache-Control: no-store\r\nConnection: close\r\n\r\n" % (status, content_type, len(body))).encode()
-    )
-    conn.sendall(body)
-
-
 def handle(conn, app):
-    request = _read_request(conn)
+    request = read_request(conn)
     if request is None:
         return
     method, path, body = request
     if method == "GET" and path == "/":
         with open(PAGE_PATH, "rb") as f:
-            _respond(conn, f.read(), "text/html; charset=utf-8")
+            respond(conn, f.read(), "text/html; charset=utf-8")
     elif method == "GET" and path == "/state":
-        _respond(conn, app.state())
+        respond(conn, app.state())
     elif method == "POST" and path == "/command":
         accepted, message = app.submit(body)
-        _respond(conn, {"ok": accepted, "message": message})
+        respond(conn, {"ok": accepted, "message": message})
     elif method == "POST" and path == "/answer":
         app.give_answer(body.strip() == "yes")
-        _respond(conn, {"ok": True, "message": ""})
+        respond(conn, {"ok": True, "message": ""})
     elif method == "POST" and path == "/stop":
         accepted, message = app.stop()
-        _respond(conn, {"ok": accepted, "message": message})
+        respond(conn, {"ok": accepted, "message": message})
     else:
-        _respond(conn, b"Not found", "text/plain", "404 Not Found")
-
-
-def serve(app, port, host="0.0.0.0", handle=handle):
-    """Answer requests forever, one at a time."""
-    server = socket.socket()
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(socket.getaddrinfo(host, port)[0][-1])
-    server.listen(4)
-    while True:
-        try:
-            conn, _ = server.accept()
-        except OSError:
-            continue
-        try:
-            conn.settimeout(2)
-            handle(conn, app)
-        except Exception:
-            pass
-        finally:
-            conn.close()
+        respond(conn, b"Not found", "text/plain", "404 Not Found")
 
 
 def run(cfg, machine, port, host="0.0.0.0", state_path=None, sounds=None, magnet_sensor=None):
     """Serve the page and play until the program is ended."""
     app = App(cfg, machine, state_path, sounds, magnet_sensor)
-    _thread.start_new_thread(serve, (app, port, host))
+    _thread.start_new_thread(serve, (app, port, host, handle))
     app.run()

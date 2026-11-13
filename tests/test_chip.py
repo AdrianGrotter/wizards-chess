@@ -6,7 +6,7 @@ import urllib.request
 
 import pytest
 
-from wizchess import boardapi, web
+from wizchess import boardapi, server, web
 from wizchess.chip import ChipMachine
 from wizchess.geometry import Geometry
 from wizchess.machine import FakeMachine, MachineError
@@ -65,7 +65,7 @@ def board():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    threading.Thread(target=web.serve, args=(service, port, "127.0.0.1", boardapi.handle), daemon=True).start()
+    threading.Thread(target=server.serve, args=(service, port, "127.0.0.1", boardapi.handle), daemon=True).start()
     threading.Thread(target=service.work, daemon=True).start()
     machine = ChipMachine("http://127.0.0.1:%d" % port, (300, 320), 1000)
     deadline = time.monotonic() + 5

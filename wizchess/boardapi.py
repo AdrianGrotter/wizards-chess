@@ -16,8 +16,7 @@ import _thread
 import json
 import time
 
-from . import web
-from .sound import Silent
+from .server import read_request, respond, serve
 
 MOST_ACTIONS = 600
 LONGEST_DWELL = 10
@@ -40,7 +39,7 @@ class Service:
 
     def __init__(self, machine, sounds=None, magnet_sensor=None):
         self.machine = machine
-        self.sounds = sounds or Silent()
+        self.sounds = sounds
         self.magnet_sensor = magnet_sensor
         self.lock = _thread.allocate_lock()
         self.sound_lock = _thread.allocate_lock()
@@ -96,6 +95,8 @@ class Service:
         return True, ""
 
     def play(self, name, queued=False):
+        if self.sounds is None:
+            return
         with self.sound_lock:
             if queued:
                 self.sounds.then(name)
@@ -178,8 +179,9 @@ class Service:
             if pending is None:
                 try:
                     self.machine.idle()
-                    with self.sound_lock:
-                        self.sounds.service()
+                    if self.sounds is not None:
+                        with self.sound_lock:
+                            self.sounds.service()
                 except Exception:
                     pass
                 time.sleep(0.05)
@@ -188,18 +190,18 @@ class Service:
 
 
 def handle(conn, service):
-    request = web._read_request(conn)
+    request = read_request(conn)
     if request is None:
         return
     method, path, body = request
     if method == "GET" and path == "/":
-        web._respond(conn, ABOUT)
+        respond(conn, ABOUT)
         return
     if method == "GET" and path == "/status":
-        web._respond(conn, service.status())
+        respond(conn, service.status())
         return
     if method != "POST":
-        web._respond(conn, {"ok": False, "message": "No such request. GET / lists them."}, status="404 Not Found")
+        respond(conn, {"ok": False, "message": "No such request. GET / lists them."}, status="404 Not Found")
         return
     try:
         data = json.loads(body) if body.strip() else {}
@@ -219,7 +221,7 @@ def handle(conn, service):
             elif path == "/set":
                 argument = (str(data["name"]), str(data["value"]))
             elif path not in ("/connect", "/settings", "/unlock", "/home"):
-                web._respond(
+                respond(
                     conn, {"ok": False, "message": "No such request. GET / lists them."}, status="404 Not Found"
                 )
                 return
@@ -229,12 +231,12 @@ def handle(conn, service):
         reply = {"ok": False, "message": "The request needs '%s'." % e.args[0]}
     except ValueError as e:
         reply = {"ok": False, "message": str(e)}
-    web._respond(conn, reply)
+    respond(conn, reply)
 
 
 def run(machine, port, host="0.0.0.0", sounds=None, magnet_sensor=None):
     """Serve requests until the program is ended."""
     service = Service(machine, sounds, magnet_sensor)
-    _thread.start_new_thread(web.serve, (service, port, host, handle))
+    _thread.start_new_thread(serve, (service, port, host, handle))
     service.submit("connect")
     service.work()

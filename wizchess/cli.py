@@ -50,6 +50,10 @@ def make_machine(cfg, fake):
     )
     if fake:
         return FakeMachine(**common)
+    if cfg.get("link") == "chip":
+        from .chip import ChipMachine
+
+        return ChipMachine(cfg.get("chip", "http://192.168.4.1"), **common)
     from .grbl import GrblMachine
 
     return GrblMachine(cfg.get("port", "auto"), cfg["baud"], link=cfg.get("link", "usb"), **common)
@@ -66,6 +70,8 @@ def prepare(cfg, machine):
     """
     if isinstance(machine, FakeMachine):
         return True
+    if getattr(machine, "keeps_position", False):
+        machine.connect()
     settings = machine.settings()
     if settings.get("32") == "1":
         print("Laser mode is on ($32=1): the engraver may switch the magnet off whenever the head stops.")
@@ -89,6 +95,15 @@ def prepare(cfg, machine):
         print("Homing...")
         machine.home()
         return True
+    if getattr(machine, "keeps_position", False):
+        if machine.head is None:
+            print("The engraver did not say where the head is.")
+            return False
+        print("The engraver counts the head as %.1f mm and %.1f mm away from its corner." % machine.head)
+        if confirm("Is the head really there?"):
+            return True
+        print("Push the head into its corner, switch the engraver off and on again, then start again.")
+        return False
     print("The engraver counts every position from where the head is right now.")
     if confirm("Is the head pushed all the way into its corner?"):
         return True
@@ -114,9 +129,13 @@ def cmd_info(cfg, machine, args):
     if isinstance(machine, FakeMachine):
         print("Fake machine: nothing to read.")
         return
-    print("Port          %s (%s)" % (machine.serial.port, "ESP32 WiFi bridge" if machine.link == "wifi" else "engraver USB"))
-    for line in machine.info():
-        print(line)
+    if getattr(machine, "keeps_position", False):
+        machine.connect()
+        print("Board         ESP32 at %s" % machine.url)
+    else:
+        print("Port          %s (%s)" % (machine.serial.port, "ESP32 WiFi bridge" if machine.link == "wifi" else "engraver USB"))
+        for line in machine.info():
+            print(line)
     s = machine.settings()
     print()
     print("Work area     $130 x $131 = %s x %s mm" % (s.get("130"), s.get("131")))
@@ -379,7 +398,10 @@ def cmd_web(cfg, machine, args):
 
     shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
     print("Open http://%s:%d/ in a browser. Ctrl-C ends the program." % (shown, args.port))
-    web.run(cfg, machine, args.port, args.host)
+    if getattr(machine, "keeps_position", False):
+        web.run(cfg, machine, args.port, args.host, "state.json", machine.sounds(), machine.sensor)
+    else:
+        web.run(cfg, machine, args.port, args.host)
 
 
 COMMANDS = {

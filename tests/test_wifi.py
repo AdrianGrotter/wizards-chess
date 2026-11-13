@@ -95,6 +95,15 @@ def test_connecting_reads_the_head_position(engraver):
     assert engraver.lines == ["G21", "G90"]
 
 
+def test_connecting_ends_a_pause_the_engraver_was_left_in(engraver):
+    engraver.state = "Hold:0"
+    machine = connect(engraver)
+    assert engraver.state == "Idle"
+    assert machine.was_paused
+    assert machine.head == (12.0, 34.0)
+    assert not connect(engraver).was_paused
+
+
 def test_commands_wait_for_ok_and_settings_are_read(engraver):
     machine = connect(engraver)
     machine.move_to(50, 60, 6000)

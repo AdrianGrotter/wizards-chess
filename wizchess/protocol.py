@@ -219,6 +219,23 @@ class GrblProtocol(GcodeMachine):
                     break
         return False
 
+    def _end_pause(self):
+        """Reset the engraver if it was left paused, dropping the paused moves. Returns whether it was.
+
+        A paused engraver takes commands in but answers none of them.
+        """
+        self._write(b"?")
+        deadline = monotonic() + 1.0
+        line = b""
+        while monotonic() < deadline and not line.startswith(b"<"):
+            line = self._readline()
+        if not line.startswith(b"<Hold"):
+            return False
+        self._came_to_rest(3.0)
+        self._write(b"\x18")
+        self._wait_until_ready(seconds=5)
+        return True
+
     def stop(self):
         """Halt all motion at once, including queued moves. The reset also switches the magnet off.
 

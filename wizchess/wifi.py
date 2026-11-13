@@ -175,6 +175,7 @@ class WifiMachine(GrblProtocol):
                 % (self.host, e)
             )
         self._wait_until_ready(seconds=15)
+        self.was_paused = self._end_pause()
         self.setup()
         self.head = self.position()
 

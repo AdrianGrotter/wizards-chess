@@ -262,7 +262,10 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
       </div>
       <div class="card" id="voice-box" hidden>
         <h2>Voice</h2>
-        <label class="opt"><input type="checkbox" id="voice"> Listen on the computer's microphone</label>
+        <div class="seg" id="voice">
+          <button aria-pressed="false" data-voice="on">Listening</button>
+          <button aria-pressed="true" data-voice="off">Muted</button>
+        </div>
         <p class="hint" id="voice-status"></p>
         <div class="heard" id="voice-heard"></div>
         <div class="said" id="voice-said"></div>
@@ -546,7 +549,7 @@ let voiceShown = "";
 function showVoice(voice) {
   $("voice-box").hidden = !voice;
   if (!voice) return;
-  $("voice").checked = voice.on;
+  for (const button of $("voice").children) button.setAttribute("aria-pressed", (button.dataset.voice === "on") === voice.on);
   $("voice-status").textContent = voice.status;
   $("voice-said").textContent = voice.on && voice.said ? "\u201c" + voice.said + "\u201d" : "";
   const key = voice.heard.map(h => h.n).join(",");
@@ -647,7 +650,9 @@ for (const button of document.querySelectorAll("button[data-cmd]")) {
 $("stop").addEventListener("click", () => post("/stop", ""));
 $("yes").addEventListener("click", () => post("/answer", "yes").then(refresh));
 $("no").addEventListener("click", () => post("/answer", "no").then(refresh));
-$("voice").addEventListener("change", e => post("/voice", e.target.checked ? "on" : "off").then(refresh));
+for (const button of $("voice").children) {
+  button.addEventListener("click", () => post("/voice", button.dataset.voice).then(refresh));
+}
 $("free").addEventListener("change", e => command("rules " + (e.target.checked ? "off" : "on")));
 $("typed").addEventListener("submit", e => {
   e.preventDefault();

@@ -73,7 +73,7 @@ between runs.
 ### Playing by voice
 
 The laptop that runs the game can listen on its microphone and pass on what is said, so
-a game runs like a conversation. Tick **Voice** on the page to switch it on. The page
+a game runs like a conversation. It starts muted; press **Listening** under Voice on the page to switch it on, and **Muted** to switch it off. The page
 shows what it is doing, the last sentences it heard with what became of each, and its
 latest reply. The microphone is the laptop's, also when the page is open on a phone.
 

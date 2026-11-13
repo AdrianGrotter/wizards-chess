@@ -179,7 +179,8 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
 .heard div { display: flex; justify-content: space-between; gap: 12px; }
 .heard div span:last-child { color: #6b4a33; font-style: italic; text-align: right; }
 .heard div.ignored { opacity: .5; }
-.said { color: #5a1e1e; font-style: italic; min-height: 1.3em; font-size: 14px; }
+.said { color: #5a1e1e; font-style: italic; font-size: 14px; }
+.hint:empty, .said:empty, .heard:empty { display: none; }
 .lost-small { display: none; font-size: 14px; color: #6b4a33; }
 .lost-small .pc { font-size: 22px; cursor: default; }
 @media (max-width: 1250px) { .lost-small { display: block; } }
@@ -259,10 +260,6 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
         </div>
         <p class="hint" id="voice-line"></p>
       </div>
-        <p class="hint" id="voice-status"></p>
-        <div class="heard" id="voice-heard"></div>
-        <div class="said" id="voice-said"></div>
-      </div>
     </section>
 
     <section class="tabpage" data-page="control" hidden>
@@ -290,6 +287,10 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
           <button aria-pressed="false" data-voice="on">Listening</button>
           <button aria-pressed="true" data-voice="off">Muted</button>
         </div>
+        <p class="hint" id="voice-status"></p>
+        <div class="heard" id="voice-heard"></div>
+        <div class="said" id="voice-said"></div>
+      </div>
     </section>
 
     <section class="tabpage" data-page="sensors" hidden>

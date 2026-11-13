@@ -261,3 +261,59 @@ def test_outline_pulls_a_piece_round_the_corners_until_ended():
     assert lines.index("M3 S1000") < lines.index(drags[0]) and "M5" in lines[lines.index(drags[-1]):]
     assert "ended at" in app.state()["log"][-1]["text"]
     assert app.state()["pieces"]["a1"] == "R"
+
+
+class Recorder:
+    def __init__(self):
+        self.heard = []
+
+    def play(self, name):
+        self.heard.append(name)
+
+    def then(self, name):
+        self.heard.append("then " + name)
+
+    def service(self):
+        pass
+
+
+def test_sounds_follow_the_game():
+    sounds = Recorder()
+    app = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), sounds=sounds)
+    threading.Thread(target=app.run, daemon=True).start()
+    for text in ["e2 e4", "e7 e5", "d1 h5", "b8 c6", "f1 c4", "g8 f6", "h5 h8", "h5 f7"]:
+        play(app, text)
+    assert sounds.heard == [
+        "pawn_move", "then your_turn",
+        "pawn_move", "then your_turn",
+        "queen_move", "then your_turn",
+        "knight_move", "then your_turn",
+        "bishop_move", "then your_turn",
+        "knight_move", "then your_turn",
+        "invalid_move",
+        "capture", "then checkmate", "then win",
+    ]
+
+
+def test_sounds_for_castling_check_and_dragging_with_rules_off():
+    sounds = Recorder()
+    app = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), sounds=sounds)
+    threading.Thread(target=app.run, daemon=True).start()
+    for text in ["e2 e4", "e7 e5", "g1 f3", "b8 c6", "f1 b5", "a7 a6", "e1 g1", "a6 b5", "d2 d4", "f8 b4", "c2 c3", "b4 c3"]:
+        play(app, text)
+    assert sounds.heard[12:14] == ["castling", "then your_turn"]
+    assert sounds.heard[14:16] == ["capture", "then your_turn"]
+    del sounds.heard[:]
+    for text in ["rules off", "a1 a4", "h4 h5"]:
+        play(app, text)
+    assert sounds.heard == ["rook_move"]
+
+
+def test_start_sound_plays_once_the_head_is_confirmed():
+    sounds = Recorder()
+    app = web.App(CFG, Engraver(), sounds=sounds)
+    threading.Thread(target=app.run, daemon=True).start()
+    for _ in range(3):
+        answer(app, True)
+    wait_for(lambda: not app.busy)
+    assert sounds.heard == ["start"]

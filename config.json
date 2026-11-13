@@ -29,5 +29,11 @@
     "white_row": -1,
     "black_row": 8,
     "spacing": 0.5
+  },
+  "sound": {
+    "tx": 12,
+    "rx": 13,
+    "busy": 14,
+    "volume": 20
   }
 }

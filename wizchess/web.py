@@ -32,8 +32,11 @@ class App:
     server's thread only hands them over, reads the state and asks for a stop.
     """
 
-    def __init__(self, cfg, machine, state_path=None):
-        """state_path names a file that keeps the grid across restarts of this program."""
+    def __init__(self, cfg, machine, state_path=None, sounds=None):
+        """state_path names a file that keeps the grid across restarts of this program.
+
+        sounds plays the game's sounds (see sound.py); without it the game is silent.
+        """
         mover = Mover(machine, Geometry.from_config(cfg["board"]), cfg["travel_feed"], cfg["drag_feed"])
         graveyard = cfg.get("graveyard")
         game = Game(
@@ -43,7 +46,8 @@ class App:
         )
         self.cfg = cfg
         self.machine = machine
-        self.session = GridSession(game, cfg.get("slow_feed", 1500), self.ask)
+        self.session = GridSession(game, cfg.get("slow_feed", 1500), self.ask, sounds)
+        self.sounds = self.session.sounds
         self.lock = _thread.allocate_lock()
         self.pending = None
         self.busy = True
@@ -69,6 +73,7 @@ class App:
         self.question = {"text": message, "yes": yes, "no": no}
         while self.answer is None and not self.stopping:
             self.machine.idle()
+            self.sounds.service()
             time.sleep(0.05)
         self.question = None
         return self.answer is True
@@ -250,6 +255,7 @@ class App:
             )
         self.ready = True
         self.say("Connected to the engraver. Ready to play.")
+        self.sounds.play("start")
 
     def _outline(self):
         """Pull a piece round and round the corner squares, to check the board lines up.
@@ -315,6 +321,8 @@ class App:
         except (ValueError, MachineError) as e:
             if not self.stopping:
                 self.say(str(e), error=True)
+                if kind == "move" and isinstance(e, ValueError):
+                    self.sounds.play("invalid_move")
         except Exception as e:
             self.say("Something went wrong inside the program: %r" % e, error=True)
         finally:
@@ -351,6 +359,7 @@ class App:
                 self.busy = command is not None
             if command is None:
                 self.machine.idle()
+                self.sounds.service()
                 time.sleep(0.05)
             else:
                 self._carry_out(command)
@@ -435,8 +444,8 @@ def serve(app, port, host="0.0.0.0"):
             conn.close()
 
 
-def run(cfg, machine, port, host="0.0.0.0", state_path=None):
+def run(cfg, machine, port, host="0.0.0.0", state_path=None, sounds=None):
     """Serve the page and play until the program is ended."""
-    app = App(cfg, machine, state_path)
+    app = App(cfg, machine, state_path, sounds)
     _thread.start_new_thread(serve, (app, port, host))
     app.run()

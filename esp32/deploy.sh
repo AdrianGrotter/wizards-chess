@@ -16,7 +16,7 @@ if [ "$port" != "auto" ]; then
 fi
 
 # The game's own modules; cli, config and grbl need a laptop.
-modules=(__init__ geometry machine mover game reset grid session protocol wifi web)
+modules=(__init__ geometry machine mover game reset grid session sound protocol wifi web)
 copies=()
 for module in "${modules[@]}"; do
   copies+=(+ cp "../wizchess/$module.py" ":wizchess/$module.py")
@@ -26,7 +26,7 @@ mpremote "${connect[@]}" mkdir :wizchess 2>/dev/null || true
 mpremote "${connect[@]}" \
   cp config.json :config.json \
   + cp ../config.json :game.json \
-  + cp main.py :main.py + cp bridge.py :bridge.py + cp chess.py :chess.py \
+  + cp main.py :main.py + cp bridge.py :bridge.py + cp chess.py :chess.py + cp dfplayer.py :dfplayer.py \
   "${copies[@]}" \
   + cp ../wizchess/page.html :wizchess/page.html \
   + reset

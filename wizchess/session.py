@@ -1,3 +1,6 @@
+import chess
+
+from . import sound
 from .geometry import parse_square
 
 
@@ -8,8 +11,9 @@ class GridSession:
     False if they call the action off.
     """
 
-    def __init__(self, game, slow_feed, ask_player):
+    def __init__(self, game, slow_feed, ask_player, sounds=None):
         self.game = game
+        self.sounds = sounds or sound.Silent()
         self.slow_feed = slow_feed
         self.ask_player = ask_player
         self.rules = True
@@ -68,8 +72,15 @@ class GridSession:
                 else:
                     _, start, end, promotion, _ = command
                     if self.rules:
-                        notes = game.play_move(game.move_between(start, end, promotion))
+                        move = game.move_between(start, end, promotion)
+                        self.sounds.play(sound.before_move(game.board, move))
+                        notes = game.play_move(move)
+                        for name in sound.after_move(game.board, move):
+                            self.sounds.then(name)
                     else:
+                        name = sound.for_drag(game.board.piece_at(chess.parse_square(start)))
+                        if name:
+                            self.sounds.play(name)
                         notes = game.free_move(start, end)
                     self.came_from = start
             finally:

@@ -59,6 +59,32 @@ is an HTTP request to `/command` on port 80, and its replies arrive on a WebSock
 port 81. The engraver doesn't restart when a session starts this way, so it keeps track
 of the head between sessions.
 
+### Sounds
+
+A DFPlayer mini wired to the ESP32 plays a sound for what happens on the board. Its
+pins and volume (0 to 30) are under `sound` in `config.json`; without that entry the
+game is silent. The player's SD card needs a folder `mp3` with files whose names start
+with a four-digit number; the rest of the name is free:
+
+| Number | Sound | Played |
+|---|---|---|
+| 1 | start | when the head's position is confirmed |
+| 2 to 7 | pawn, knight, bishop, rook, queen, king move | as that piece starts to move |
+| 8 | capture | as a capture starts |
+| 9 | invalid_move | when a move is refused |
+| 10 | win | after the checkmate sound |
+| 11 | check | after a move that gives check |
+| 12 | checkmate | after a move that ends the game |
+| 13 | castling | as castling starts |
+| 14 | promotion | after a pawn is promoted |
+| 15 | draw | after a move that ends the game in a draw |
+| 16 | your_turn | after any other move |
+
+The sound for a move starts with the move and cuts off whatever was still playing; the
+sounds for what the move led to wait their turn. macOS adds hidden `._` files when it
+copies onto the card, which the player mistakes for sounds: run `dot_clean -m` on the
+card afterwards.
+
 ### The same page from the laptop
 
 ```sh

@@ -150,14 +150,38 @@ button.sq { border: 0; padding: 0; margin: 0; min-width: 0; font: inherit; color
 .sq.danger { box-shadow: inset 0 0 0 999px #a3261f77; }
 .sq.hid .pc { visibility: hidden; }
 .sq.head::after { content: ""; position: absolute; width: 88%; aspect-ratio: 1; border-radius: 50%; pointer-events: none; z-index: 3;
-  border: 2px solid #5a1e1e; background: radial-gradient(circle, transparent 55%, #5a1e1e33 56%); }
-.board.busy .sq.head::after { border-style: dashed; animation: turn 2.4s linear infinite; }
-@keyframes turn { to { transform: rotate(360deg); } }
+  border: 2px dashed #e8c26a; background: radial-gradient(circle, #ffe7a044, #0000 70%);
+  box-shadow: 0 0 14px #ffcf6b88, inset 0 0 10px #ffcf6b66; transition: box-shadow .3s; }
+.board.busy .sq.head::after { box-shadow: 0 0 30px #ffcf6b, inset 0 0 18px #ffcf6b; }
 .coord { font-size: 2.3cqw; }
-.fly { position: fixed; z-index: 30; display: grid; place-items: center; pointer-events: none; line-height: 1;
-  transition: transform .45s cubic-bezier(.3, .1, .2, 1); filter: drop-shadow(0 10px 8px #0008); }
+.fly { position: fixed; z-index: 40; pointer-events: none; margin: 0; line-height: 1; transform: translate(-50%, -50%); }
 .fly.w { color: #fffaf0; text-shadow: 0 0 1px #2a1a10, 1px 1px 0 #2a1a10, -1px -1px 0 #2a1a10, 1px -1px 0 #2a1a10, -1px 1px 0 #2a1a10; }
 .fly.b { color: #2a1a10; text-shadow: 0 0 1px #c9a24a; }
+
+/* ---------- magic ---------- */
+.log { scrollbar-width: thin; scrollbar-color: #c9a24a88 transparent; }
+#dust { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2; mix-blend-mode: screen; }
+.spark { position: fixed; z-index: 50; pointer-events: none; color: #fff1c2; text-shadow: 0 0 6px #ffd27a, 0 0 14px #ffb84a; transform: translate(-50%, -50%); }
+@media (prefers-reduced-motion: no-preference) {
+  .sq.head::after { animation: runes 9s linear infinite; }
+  .sq.last { animation: lastglow 2.8s ease-in-out infinite; }
+  .sq.sel .pc { animation: levitate 1.5s ease-in-out infinite; filter: drop-shadow(0 8px 6px #0007) drop-shadow(0 0 10px #ffd27a); }
+  .dot, .take { animation: pop .35s cubic-bezier(.3,1.6,.5,1) both; }
+  .pile .pc.new { animation: drop .6s cubic-bezier(.3,1.5,.5,1) both; }
+  .log .new { animation: ink 1.6s ease both; }
+  .p-head h1 { background: linear-gradient(100deg, #5a1e1e 0 42%, #c9a24a 50%, #5a1e1e 58% 100%) 0 0 / 260% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 7s ease-in-out infinite; }
+  .sheet > .wax { animation: glint 6s ease-in-out infinite; }
+  .tabpage:not([hidden]) { animation: turnpage .4s ease both; }
+}
+@keyframes runes { to { transform: rotate(360deg); } }
+@keyframes lastglow { 50% { box-shadow: inset 0 0 0 999px #ffd27a33, inset 0 0 18px #ffd27a; } }
+@keyframes levitate { 50% { transform: translateY(-9%) scale(1.07); } }
+@keyframes pop { from { transform: scale(0); opacity: 0; } }
+@keyframes drop { from { transform: translateY(-30px) scale(1.4) rotate(var(--r, 0deg)); opacity: 0; } to { transform: rotate(var(--r, 0deg)); } }
+@keyframes ink { from { color: #b8862f; text-shadow: 0 0 8px #ffd27a; } }
+@keyframes shimmer { 0%, 35% { background-position: 100% 0; } 75%, 100% { background-position: 0 0; } }
+@keyframes glint { 0%, 80%, 100% { filter: drop-shadow(1px 2px 1px #0000008c) drop-shadow(5px 8px 7px #0000006b); } 88% { filter: drop-shadow(1px 2px 1px #0000008c) drop-shadow(5px 8px 7px #0000006b) brightness(1.35) drop-shadow(0 0 8px #ffd27a88); } }
+@keyframes turnpage { from { opacity: 0; transform: translateY(6px); } }
 .chip i.off { background: #a3261f; }
 .chip i.busy { background: #c9a24a; animation: pend .5s ease-in-out infinite alternate; box-shadow: none; }
 .stop.live { box-shadow: 0 0 0 3px #c9a24a, 0 0 18px 6px #a3261f; background: #8f1d16; }
@@ -196,6 +220,7 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
 </head>
 <body>
 <div class="vignette"></div>
+<canvas id="dust"></canvas>
 <div class="props">
   <img class="prop-open" alt="" src="assets/book-open.webp">
   <img class="prop-leer" alt="" src="assets/book-leather.webp">
@@ -328,6 +353,7 @@ const GLYPH = {k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟"};
 const FILES = "abcdefgh";
 const $ = id => document.getElementById(id);
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let lastTo = null, newestLogged = 0;
 let state = null, selected = null, notices = [], lastQuestion = null, previous = null, lastStatus = "", lastLog = "", hidden = {}, optimistic = null;
 
 /* ---------- the board ---------- */
@@ -353,20 +379,25 @@ function draw() {
   const targets = (selected && state.moves && state.moves[selected]) || [];
   for (const name in squares) {
     const sq = squares[name], piece = state.pieces[name];
-    sq.replaceChildren();
-    if (piece) {
-      const pc = document.createElement("span");
-      pc.className = "pc " + (isWhite(piece) ? "w" : "b");
-      pc.textContent = glyph(piece);
-      sq.appendChild(pc);
+    const shows = (piece || "") + (targets.includes(name) ? "*" : "");
+    if (sq.dataset.shows !== shows) {
+      sq.dataset.shows = shows;
+      sq.replaceChildren();
+      if (piece) {
+        const pc = document.createElement("span");
+        pc.className = "pc " + (isWhite(piece) ? "w" : "b");
+        pc.textContent = glyph(piece);
+        sq.appendChild(pc);
+      }
+      if (targets.includes(name)) {
+        const mark = document.createElement("span");
+        mark.className = piece ? "take" : "dot";
+        sq.appendChild(mark);
+      }
+      if (name[1] === "1") sq.appendChild(coord("f", name[0]));
+      if (name[0] === "a") sq.appendChild(coord("r", name[1]));
     }
-    if (targets.includes(name)) {
-      const mark = document.createElement("span");
-      mark.className = piece ? "take" : "dot";
-      sq.appendChild(mark);
-    }
-    if (name[1] === "1") sq.appendChild(coord("f", name[0]));
-    if (name[0] === "a") sq.appendChild(coord("r", name[1]));
+    sq.classList.toggle("last", name === lastTo);
     sq.classList.toggle("pend", !!optimistic && name === optimistic.to);
     sq.classList.toggle("sel", name === selected);
     sq.classList.toggle("head", name === state.head);
@@ -391,14 +422,18 @@ function draw() {
   showVoice(state.voice);
   const small = [];
   for (const color of ["white", "black"]) {
-    const lost = [...state.parked[color]];
-    $("lost-" + color).replaceChildren(...lost.map((piece, n) => {
-      const pc = document.createElement("span");
-      pc.className = "pc " + (color === "white" ? "w" : "b");
-      pc.style.setProperty("--r", ((n * 37) % 41 - 20) + "deg");
-      pc.textContent = glyph(piece);
-      return pc;
-    }));
+    const lost = [...state.parked[color]], pile = $("lost-" + color);
+    if (pile.dataset.shows !== state.parked[color]) {
+      const before = pile.dataset.shows === undefined ? lost.length : pile.children.length;
+      pile.dataset.shows = state.parked[color];
+      pile.replaceChildren(...lost.map((piece, n) => {
+        const pc = document.createElement("span");
+        pc.className = "pc " + (color === "white" ? "w" : "b") + (n >= before ? " new" : "");
+        pc.style.setProperty("--r", ((n * 37) % 41 - 20) + "deg");
+        pc.textContent = glyph(piece);
+        return pc;
+      }));
+    }
     if (lost.length) small.push(color + " lost " + lost.map(glyph).join(""));
   }
   $("lost-small").textContent = small.join(" · ");
@@ -413,12 +448,15 @@ function draw() {
   lastQuestion = q ? q.text : null;
   const entries = notices.concat(state.log).sort((a, b) => b.n - a.n);
   const logKey = JSON.stringify(entries);
-  if (logKey !== lastLog) $("log").replaceChildren(...entries.slice(0, 40).map(entry => {
-    const line = document.createElement("div");
-    line.textContent = entry.text;
-    if (entry.error) line.className = "error";
-    return line;
-  }));
+  if (logKey !== lastLog) {
+    $("log").replaceChildren(...entries.slice(0, 40).map(entry => {
+      const line = document.createElement("div");
+      line.textContent = entry.text;
+      line.className = (entry.error ? "error" : "") + (lastLog && entry.n > newestLogged ? " new" : "");
+      return line;
+    }));
+    newestLogged = entries.length ? entries[0].n : 0;
+  }
   lastLog = logKey;
   const latest = entries[0];
   $("last").textContent = latest && latest.text.length < 200 ? latest.text : "";
@@ -438,23 +476,60 @@ function centre(name) {
   return {x: r.left + r.width / 2, y: r.top + r.height / 2, size: r.width};
 }
 
-function glide(piece, from, to) {
-  const a = centre(from), b = centre(to);
-  const el = document.createElement("div");
+function sparkle(x, y, count) {
+  if (calm) return;
+  for (let i = 0; i < count; i++) {
+    const spark = document.createElement("span");
+    spark.className = "spark";
+    spark.textContent = Math.random() < .55 ? "\u2726" : "\u2022";
+    spark.style.left = x + "px";
+    spark.style.top = y + "px";
+    spark.style.fontSize = (6 + Math.random() * 12) + "px";
+    document.body.append(spark);
+    const angle = Math.random() * Math.PI * 2, far = 25 + Math.random() * 70;
+    spark.animate([
+      {transform: "translate(-50%,-50%) scale(1)", opacity: 1},
+      {transform: "translate(calc(-50% + " + Math.cos(angle) * far + "px), calc(-50% + " + (Math.sin(angle) * far - 24) +
+                  "px)) scale(.2) rotate(" + Math.random() * 180 + "deg)", opacity: 0},
+    ], {duration: 700 + Math.random() * 700, easing: "cubic-bezier(.2,.7,.3,1)"}).onfinish = () => spark.remove();
+  }
+}
+
+/* A piece in the air from one point of the window to another, along an arc. */
+function fly(piece, from, to, size, how) {
+  const el = document.createElement("span");
   el.className = "fly " + (isWhite(piece) ? "w" : "b");
   el.textContent = glyph(piece);
-  el.style.cssText = "left:" + (a.x - a.size / 2) + "px;top:" + (a.y - a.size / 2) + "px;width:" + a.size +
-    "px;height:" + a.size + "px;font-size:" + a.size * .72 + "px";
-  document.body.appendChild(el);
+  el.style.left = from.x + "px";
+  el.style.top = from.y + "px";
+  el.style.fontSize = size * .72 + "px";
+  document.body.append(el);
+  const dx = to.x - from.x, dy = to.y - from.y;
+  return el.animate([
+    {transform: "translate(-50%,-50%) scale(1)"},
+    {transform: "translate(calc(-50% + " + dx / 2 + "px), calc(-50% + " + (dy / 2 - (how.arc || 30)) + "px)) scale(" + (how.lift || 1.2) + ")",
+     filter: "drop-shadow(0 14px 10px #000b) drop-shadow(0 0 14px #ffd27a)", offset: .5},
+    {transform: "translate(calc(-50% + " + dx + "px), calc(-50% + " + dy + "px)) scale(" + (how.end || 1) + ") rotate(" + (how.spin || 0) + "deg)"},
+  ], {duration: how.duration || 850, easing: "cubic-bezier(.45,.05,.3,1)"}).finished.then(() => el.remove(), () => el.remove());
+}
+
+function glide(piece, from, to) {
+  const a = centre(from), b = centre(to);
   hidden[to] = true;
-  requestAnimationFrame(() => {
-    el.style.transform = "translate(" + (b.x - a.x) + "px," + (b.y - a.y) + "px) scale(1.25)";
-  });
-  setTimeout(() => {
-    el.remove();
+  fly(piece, a, b, a.size, {}).then(() => {
     delete hidden[to];
+    sparkle(b.x, b.y, 18);
     draw();
-  }, 450);
+  });
+}
+
+/* A captured piece leaves the board in a high arc and lands in the tray, where the tray is shown. */
+function carryOff(piece, from) {
+  const pile = $("lost-" + (isWhite(piece) ? "white" : "black")).getBoundingClientRect();
+  if (!pile.width) return;
+  const a = centre(from), b = {x: pile.left + pile.width / 2 + 30, y: pile.top + pile.height / 2};
+  setTimeout(() => fly(piece, a, b, a.size, {duration: 1100, arc: 160, lift: 1.5, end: .8, spin: 20 - Math.random() * 40})
+    .then(() => sparkle(b.x, b.y, 12)), 300);
 }
 
 function react(before, after) {
@@ -467,6 +542,7 @@ function react(before, after) {
   }
   if (!left.length && !arrived.length) return;
   if (left.length + arrived.length > 7) {
+    lastTo = null;
     sound.chime(523);
     return;
   }
@@ -480,9 +556,12 @@ function react(before, after) {
     if (!source) continue;
     used.add(source.name);
     if (!calm) glide(target.piece, source.name, target.name);
+    lastTo = target.name;
     moved = true;
   }
-  if (left.some(gone => !used.has(gone.name))) setTimeout(sound.crash, 380);
+  const taken = left.filter(gone => !used.has(gone.name));
+  if (taken.length) setTimeout(sound.crash, 380);
+  if (moved && !calm) taken.forEach(gone => carryOff(gone.piece, gone.name));
   if (moved) sound.slide();
 }
 
@@ -679,6 +758,39 @@ try {
   const kept = localStorage.getItem("tab");
   if ([...tabs].some(tab => tab.dataset.tab === kept)) openTab(kept);
 } catch (e) {}
+
+/* ---------- golden dust in the candlelight ---------- */
+(() => {
+  if (calm) return;
+  const canvas = $("dust"), ctx = canvas.getContext("2d");
+  let width, height;
+  const fit = () => {
+    const density = devicePixelRatio || 1;
+    width = innerWidth; height = innerHeight;
+    canvas.width = width * density; canvas.height = height * density;
+    ctx.setTransform(density, 0, 0, density, 0, 0);
+  };
+  addEventListener("resize", fit);
+  fit();
+  const motes = Array.from({length: 55}, () => ({
+    x: Math.random() * innerWidth, y: Math.random() * innerHeight, r: .6 + Math.random() * 1.5,
+    vy: -(.05 + Math.random() * .2), vx: (Math.random() - .5) * .1, phase: Math.random() * 6.3,
+  }));
+  (function tick() {
+    ctx.clearRect(0, 0, width, height);
+    for (const m of motes) {
+      m.phase += .012; m.x += m.vx + Math.sin(m.phase) * .18; m.y += m.vy;
+      if (m.y < -10) { m.y = height + 10; m.x = Math.random() * width; }
+      const alpha = .18 + .4 * (Math.sin(m.phase * 2.3) + 1) / 2;
+      const glow = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 4);
+      glow.addColorStop(0, "rgba(255,226,160," + alpha + ")");
+      glow.addColorStop(1, "rgba(255,200,110,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 4, 0, 6.283); ctx.fill();
+    }
+    requestAnimationFrame(tick);
+  })();
+})();
 
 (async function poll() {
   await refresh();

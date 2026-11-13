@@ -61,7 +61,11 @@ The page shows the board on a wooden plank, a sheet with tabs for the game, the 
 the sensor and the settings, and a tray with the captured pieces. Its pictures are in
 `wizchess/assets/`, and its fonts come from Google Fonts when the browser has internet.
 
-Click a piece and then a square to move it. With `--host 0.0.0.0`, phones on the same
+Click a piece and then a square to move it. There is no need to wait for a piece to
+arrive: the next moves can be given while it travels, up to four ahead. Each is checked
+at once against the position it will meet, the page shows that position straight away,
+and the board carries the moves out in order. If one fails or STOP is pressed, the moves
+still waiting are dropped. With `--host 0.0.0.0`, phones on the same
 network can open the page at the laptop's address too. Anyone who can open the page can
 move the pieces.
 

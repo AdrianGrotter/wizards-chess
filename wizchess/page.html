@@ -377,7 +377,8 @@ function draw() {
   board.classList.toggle("busy", state.busy);
   $("status").textContent = state.status;
   $("chip-light").className = !state.ready ? "off" : state.busy ? "busy" : "";
-  $("chip-text").textContent = !state.ready ? "Not connected to the board" : state.busy ? "The pieces are moving…" : "Ready";
+  $("chip-text").textContent = !state.ready ? "Not connected to the board" : !state.busy ? "Ready"
+    : state.waiting ? "The pieces are moving… " + state.waiting + " more waiting" : "The pieces are moving…";
   $("stop").classList.toggle("live", state.busy);
   $("free").checked = !state.rules;
   $("head-text").textContent = state.head ? "The magnet is under " + state.head.toUpperCase() + "." : "The magnet is between squares or parked.";
@@ -596,10 +597,6 @@ function clicked(name) {
     $("question").scrollIntoView({behavior: "smooth", block: "center"});
     return;
   }
-  if (state.busy || optimistic) {
-    notice("Wait for the board to finish its move.", true);
-    return;
-  }
   if (selected !== null && state.rules && !state.pieces[selected]) selected = null;
   if (selected === null) {
     if (state.pieces[name] || !state.rules) { selected = name; sound.click(); }
@@ -628,7 +625,8 @@ function clicked(name) {
 /* Shows a move the moment it is asked for, until the board reports it has finished. */
 function overlay() {
   if (!optimistic) return;
-  if (Date.now() - optimistic.at > 1200 && !state.busy) { optimistic = null; return; }
+  const settled = state.pieces[optimistic.to] === optimistic.piece && !state.pieces[optimistic.from];
+  if (settled || (Date.now() - optimistic.at > 1200 && !state.busy)) { optimistic = null; return; }
   delete state.pieces[optimistic.from];
   state.pieces[optimistic.to] = optimistic.piece;
 }

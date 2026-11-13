@@ -2,6 +2,8 @@ import json
 import threading
 import time
 
+import chess
+
 import pytest
 
 from wizchess import web
@@ -97,12 +99,14 @@ def test_page_and_state_are_served():
 
 
 class SlowMachine(FakeMachine):
-    """A move that takes until someone interrupts it, like a long drag."""
+    """A move that takes until someone interrupts it or sets released, like a long drag."""
+
+    released = False
 
     def send(self, line, timeout=None):
         if line.startswith("G53"):
             deadline = time.monotonic() + 5
-            while not self.interrupted and time.monotonic() < deadline:
+            while not self.interrupted and not self.released and time.monotonic() < deadline:
                 time.sleep(0.01)
             if self.interrupted:
                 raise web.MachineError("Stopped.")
@@ -113,16 +117,64 @@ def test_busy_board_refuses_commands_and_stop_halts_it():
     app = started(SlowMachine((300, 320), 1000, echo=False))
     wait_for(lambda: not app.busy)
     assert app.submit("e2 e4") == (True, "")
-    wait_for(lambda: app.busy)
-    assert app.submit("d2 d4") == (False, "The board is still busy with the last command.")
+    wait_for(lambda: app.busy and not app.queue)
+    assert app.submit("park") == (False, "The board is still busy with the last command.")
+    assert app.submit("d7 d5") == (True, "")
     assert app.stop() == (True, "")
     wait_for(lambda: not app.busy)
     assert app.machine.lines[-1] == "<stop>"
     assert not app.ready
-    assert "Stopped. The head's position is lost" in app.state()["log"][-1]["text"]
-    assert app.state()["pieces"]["e2"] == "P"
+    texts = [entry["text"] for entry in app.state()["log"]]
+    assert "Stopped. The head's position is lost" in texts[-2] and texts[-1] == "1 waiting move dropped."
+    assert app.state()["pieces"]["e2"] == "P" and app.state()["pieces"]["d7"] == "p"
     play(app, "e2 e4")
     assert "hasn't been confirmed" in app.state()["log"][-1]["text"]
+
+
+def test_moves_are_taken_while_the_board_is_busy_and_played_in_order():
+    machine = SlowMachine((300, 320), 1000, echo=False)
+    app = started(machine)
+    wait_for(lambda: not app.busy)
+    assert app.submit("e2 e4") == (True, "")
+    shown = app.state()
+    assert shown["pieces"]["e4"] == "P" and "e2" not in shown["pieces"]
+    assert shown["status"] == "Black to move" and "d7" in shown["moves"] and shown["busy"]
+    assert app.submit("d2 d4") == (False, "It's Black's turn.")
+    assert app.submit("d7 d5") == (True, "")
+    assert app.submit("e4 d5") == (True, "")
+    assert app.state()["pieces"]["d5"] == "P" and app.state()["waiting"] >= 1
+    assert app.session.game.board.piece_at(chess.E2) is not None
+    machine.released = True
+    wait_for(lambda: not app.busy)
+    final = app.state()
+    assert final["pieces"]["d5"] == "P" and final["parked"]["black"] == "p" and final["waiting"] == 0
+    assert final["status"] == "Black to move" and app.plan is None
+    assert [e["text"] for e in final["log"] if e["error"]] == []
+
+
+def test_stop_before_a_waiting_move_has_started_still_stops():
+    app = started()
+    wait_for(lambda: not app.busy)
+    with app.lock:
+        app.queue.append(parse_command("e2 e4"))
+        app.busy = True
+        assert app.stop() == (True, "")
+    wait_for(lambda: not app.busy)
+    assert not app.stopping and not app.machine.interrupted
+    assert app.state()["pieces"]["e2"] == "P"
+    assert "Stopped." in app.state()["log"][-2]["text"]
+
+
+def test_no_more_than_a_few_moves_wait():
+    app = started(SlowMachine((300, 320), 1000, echo=False))
+    wait_for(lambda: not app.busy)
+    assert app.submit("e2 e4") == (True, "")
+    wait_for(lambda: not app.queue)
+    for text in ["e7 e5", "g1 f3", "b8 c6", "f1 c4"]:
+        assert app.submit(text) == (True, "")
+    accepted, message = app.submit("g8 f6")
+    assert not accepted and "already waiting" in message
+    app.stop()
 
 
 class Engraver(GcodeMachine):

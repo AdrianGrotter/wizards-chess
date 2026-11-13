@@ -24,6 +24,8 @@ LOG_LENGTH = 40
 SUGGESTED_ACCELERATION = 500
 HIGH_ACCELERATION = 1000
 MOVING_COMMANDS = ("move", "goto", "park", "outline")
+# How many moves may wait behind the one being carried out.
+MOST_WAITING = 4
 OUTLINE_CORNERS = ("a1", "a8", "h8", "h1")
 
 
@@ -32,6 +34,11 @@ class App:
 
     Commands run one at a time on the thread that calls run(); the web
     server's thread only hands them over, reads the state and asks for a stop.
+
+    Moves can be handed over while earlier moves are still being carried
+    out. They wait in a queue, and each is checked on arrival against the
+    position it will meet, which is kept in plan: a second game whose board
+    runs ahead of the real one by the moves not yet finished.
     """
 
     def __init__(self, cfg, machine, state_path=None, sounds=None, magnet_sensor=None):
@@ -57,7 +64,11 @@ class App:
         self.magnet_sensor = magnet_sensor
         self.voice = None
         self.lock = _thread.allocate_lock()
-        self.pending = None
+        self.queue = []
+        self.only_moves = False
+        self.plan = None
+        self.planned = None
+        self.failed = False
         self.busy = True
         self.ready = False
         self.stopping = False
@@ -106,17 +117,53 @@ class App:
                 return True, GRID_HELP
             if command[0] == "quit":
                 command = ("park",)
+        is_move = command[0] == "move"
         with self.lock:
-            if self.busy or self.pending is not None:
+            idle = not self.busy and not self.queue
+            if not idle and not (is_move and self.only_moves and not self.stopping):
                 return False, "The board is still busy with the last command."
-            self.pending = command
+            if len(self.queue) >= MOST_WAITING:
+                return False, "%d moves are already waiting. Let the board catch up first." % MOST_WAITING
+            if is_move and self.session.rules and self.ready:
+                game = self.session.game
+                if self.plan is None:
+                    plan = Game(game.mover)
+                    plan.board = chess.Board(game.board.fen())
+                else:
+                    plan = self.plan
+                try:
+                    move = plan.move_between(command[1], command[2], command[3])
+                except ValueError as e:
+                    if not idle:
+                        return False, str(e)
+                    # With nothing ahead of it, the move is refused where it is carried out.
+                    move = None
+                if move is not None:
+                    plan.board.push(move)
+                    self.plan = plan
+                    status, moves = self._describe(plan, "White" if plan.board.turn else "Black")
+                    self.planned = {
+                        "pieces": {chess.square_name(sq): p.symbol() for sq, p in plan.board.piece_map().items()},
+                        "status": status, "moves": moves,
+                    }
+            if idle:
+                self.only_moves = is_move
+            self.queue.append(command)
+            self.busy = True
         return True, ""
+
+    @property
+    def pending(self):
+        """The next command waiting to be carried out, or None."""
+        queue = self.queue
+        return queue[0] if queue else None
 
     def stop(self):
         """Halt whatever the engraver is doing. Called from the web server's thread."""
         if not self.busy:
             return False, "Nothing is moving."
         self.stopping = True
+        self.failed = True
         self.machine.interrupt()
         return True, ""
 
@@ -128,15 +175,19 @@ class App:
             for color in parked:
                 parked[color] = "".join(piece.symbol() for _, piece in game.graveyard.parked[color])
         felt = None if self.magnet_sensor is None else self.magnet_sensor()
+        planned = self.planned
         return {
-            "pieces": {chess.square_name(sq): p.symbol() for sq, p in game.board.piece_map().items()},
+            "pieces": planned["pieces"] if planned else {
+                chess.square_name(sq): p.symbol() for sq, p in game.board.piece_map().items()
+            },
             "parked": parked,
             "head": None if head is None else game.mover.geometry.square_at(head),
             "came_from": self.session.came_from,
             "rules": self.session.rules,
-            "status": self.status,
-            "moves": self.moves,
+            "status": planned["status"] if planned else self.status,
+            "moves": planned["moves"] if planned else self.moves,
             "busy": self.busy,
+            "waiting": len(self.queue),
             "ready": self.ready,
             "question": self.question,
             "sensor": None if felt is None else bool(felt),
@@ -182,13 +233,9 @@ class App:
             return
         self.say("The grid is as it was left before the restart. If the pieces were moved since, fix it with put and remove.")
 
-    def _refresh(self):
-        game = self.session.game
+    def _describe(self, game, side):
+        """The status line and the legal moves, by starting square, for a game's position."""
         board = game.board
-        if not self.session.rules:
-            self.status = "Rules are off: any piece can go anywhere"
-            self.moves = {}
-            return
         problems = game.problems()
         moves = {}
         if not problems:
@@ -197,16 +244,22 @@ class App:
                 target = chess.square_name(move.to_square)
                 if target not in targets:
                     targets.append(target)
-        self.moves = moves
-        side = self.session.side()
         if problems:
-            self.status = "Not a playable position: " + "; ".join(problems)
+            status = "Not a playable position: " + "; ".join(problems)
         elif board.is_checkmate():
-            self.status = "Checkmate: %s wins" % ("Black" if board.turn else "White")
+            status = "Checkmate: %s wins" % ("Black" if board.turn else "White")
         elif board.is_game_over():
-            self.status = "Game over: a draw"
+            status = "Game over: a draw"
         else:
-            self.status = "%s to move%s" % (side, ", and in check" if board.is_check() else "")
+            status = "%s to move%s" % (side, ", and in check" if board.is_check() else "")
+        return status, moves
+
+    def _refresh(self):
+        if not self.session.rules:
+            self.status = "Rules are off: any piece can go anywhere"
+            self.moves = {}
+            return
+        self.status, self.moves = self._describe(self.session.game, self.session.side())
 
     def _check_settings(self):
         settings = self.machine.settings()
@@ -333,11 +386,13 @@ class App:
             for note in self.session.execute(command):
                 self.say(note)
         except (ValueError, MachineError) as e:
+            self.failed = True
             if not self.stopping:
                 self.say(str(e), error=True)
                 if kind == "move" and isinstance(e, ValueError):
                     self.sounds.play("invalid_move")
         except Exception as e:
+            self.failed = True
             self.say("Something went wrong inside the program: %r" % e, error=True)
         finally:
             if self.stopping:
@@ -367,10 +422,21 @@ class App:
         """Carry out queued commands forever."""
         self._carry_out(("reconnect",))
         while True:
+            dropped = 0
             with self.lock:
-                command = self.pending
-                self.pending = None
-                self.busy = command is not None
+                if self.failed:
+                    # What was waiting counted on the command that went wrong.
+                    dropped, self.queue = len(self.queue), []
+                    self.failed = False
+                command = self.queue.pop(0) if self.queue else None
+                if command is None:
+                    self.plan = self.planned = None
+                    self.busy = False
+            if self.stopping:
+                # The stop came between two commands, with nothing running to catch it.
+                self._stopped()
+            if dropped:
+                self.say("%d waiting move%s dropped." % (dropped, "" if dropped == 1 else "s"), error=True)
             if command is None:
                 self.machine.idle()
                 self.sounds.service()

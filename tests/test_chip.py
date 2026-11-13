@@ -106,6 +106,22 @@ def test_nothing_is_sent_until_the_drag_is_complete(board):
     assert len(board.engraver.lines) == 2
 
 
+def test_more_actions_than_one_request_holds_are_split_between_drags(board, monkeypatch):
+    from wizchess import chip
+
+    monkeypatch.setattr(chip, "MOST_ACTIONS", 10)
+    sent = []
+    job = board._job
+    monkeypatch.setattr(board, "_job", lambda path, body=None: sent.append(body["actions"]) or job(path, body))
+    mover = mover_for(board)
+    for rank in range(4):
+        mover.run(Step((rank, 1), (rank, 3)), settle=False)
+    board.wait_until_idle()
+    assert sum(len(actions) for actions in sent) == 24 and len(sent) == 4
+    assert all(actions[-1] == ["magnet", False] for actions in sent[:-1])
+    assert board.engraver.lines.count("M5") == 4
+
+
 def test_connect_reads_the_head_from_the_engraver(board):
     board.engraver.head = (12.5, 40.0)
     board.engraver.connect = lambda: None

@@ -10,6 +10,9 @@ import urllib.request
 
 from .machine import MOTION_TIMEOUT, GcodeMachine, MachineError
 
+# The ESP32 takes at most this many actions in one request.
+MOST_ACTIONS = 600
+
 
 class ChipMachine(GcodeMachine):
     # The engraver keeps counting the head's position between sessions.
@@ -95,9 +98,21 @@ class ChipMachine(GcodeMachine):
 
     def flush(self):
         """Send the collected actions and wait until the board has carried them out."""
-        if self.actions:
-            actions, self.actions = self.actions, []
-            self._job("/run", {"actions": actions})
+        while self.actions:
+            count = len(self.actions)
+            if count > MOST_ACTIONS:
+                # Cut where the magnet is off, so no piece is left waiting mid-drag.
+                count = MOST_ACTIONS
+                while count > 1 and self.actions[count - 1] != ["magnet", False]:
+                    count -= 1
+                if count == 1:
+                    count = MOST_ACTIONS
+            actions, self.actions = self.actions[:count], self.actions[count:]
+            try:
+                self._job("/run", {"actions": actions})
+            except MachineError:
+                self.actions = []
+                raise
 
     def wait_until_idle(self):
         self.flush()

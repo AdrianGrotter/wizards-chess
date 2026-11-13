@@ -164,9 +164,9 @@ class Recogniser:
 
 
 class Voice:
-    """Says things aloud with the laptop's own voice, and prints them."""
+    """Prints the replies to the players and, when asked to, says them aloud with the laptop's own voice."""
 
-    def __init__(self, aloud=True):
+    def __init__(self, aloud=False):
         self.program = shutil.which("say") if aloud else None
         self.speaking = False
         self.lock = threading.Lock()
@@ -270,7 +270,7 @@ class Listener:
 
     SHOWN = 6
 
-    def __init__(self, board, model, level=700, microphone=None, aloud=True):
+    def __init__(self, board, model, level=700, microphone=None, aloud=False):
         self.model = model
         self.level = level
         self.microphone = microphone
@@ -392,7 +392,7 @@ def _act(conversation, text):
         print("heard: %s -> no answer from the board at %s" % (text, conversation.board.url))
 
 
-def run(url, model, typed=False, aloud=True, level=700, microphone=None):
+def run(url, model, typed=False, aloud=False, level=700, microphone=None):
     """Listen and talk until Ctrl-C. With typed, sentences come from the keyboard instead."""
     board = Board(url)
     try:

@@ -98,15 +98,16 @@ What it understands:
 | "bishop takes knight" | the capture, named by pieces |
 | "castle", "castle queenside" | castling |
 | "pawn takes a8, promote to knight" | promotion; a queen unless you say otherwise |
-| "yes", "no" | answers the board's question, which it reads aloud |
+| "yes", "no" | answers the board's question |
 | "new game" | asks for a yes first |
 | "stop" | halts the engraver, about a second after the word |
 
 It listens all the time, so a sentence only counts when every word in it is chess talk;
-anything else is taken for chatter. It says each move back as the move starts, asks
-which piece when two could make the move ("Which knight: the one on B1 or F3?"), and
-reads the board's refusals and "check" aloud. The page and the terminal show every
-sentence it heard and what it did with it.
+anything else is taken for chatter. It never speaks: its replies appear on the page and
+in the terminal, as text. There it names each move as the move starts, asks which piece
+when two could make the move ("Which knight: the one on B1 or F3?"), and shows every
+sentence it heard with what it did with it. The terminal version says the replies aloud
+only when started with `--aloud`.
 
 Letters like B, D and E sound alike. When it mishears a square, name both squares or use
 the spelling alphabet: alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel.
@@ -378,7 +379,7 @@ it, or never.
 | `sound.py` | which sound belongs to which moment of the game | game mode |
 | `web.py`, `page.html` | the web page and the game loop behind it | game mode |
 | `heard.py` | turns a spoken sentence into a command for the board | laptop only |
-| `voice.py` | microphone, speech recogniser and the spoken replies | laptop only |
+| `voice.py` | microphone, speech recogniser and the replies | laptop only |
 | `cli.py` | command line | laptop only |
 
 Positions are sent as machine coordinates (`G53`), so offsets that other software

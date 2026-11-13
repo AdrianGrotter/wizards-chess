@@ -383,7 +383,7 @@ def cmd_web(cfg, machine, args):
     from . import voice
 
     def make_voice(app):
-        return voice.Listener(voice.OwnBoard(app), args.model, args.level, args.microphone)
+        return voice.Listener(voice.OwnBoard(app), args.model, args.level, args.microphone, aloud=False)
 
     if getattr(machine, "keeps_position", False):
         web.run(cfg, machine, args.port, args.host, "state.json", machine.sounds(), machine.sensor, make_voice)
@@ -440,7 +440,7 @@ def main(argv=None):
     p.add_argument("--board", default="http://localhost:8000", help="address of the board's web page")
     p.add_argument("--model", default="models/ggml-small.en.bin", help="whisper.cpp model file")
     p.add_argument("--typed", action="store_true", help="type the sentences instead of speaking them")
-    p.add_argument("--silent", action="store_true", help="print the board's replies without saying them aloud")
+    p.add_argument("--aloud", action="store_true", help="say the board's replies aloud instead of only printing them")
     p.add_argument("--level", type=int, default=700, help="how loud speech must be, 0 to 32767 (default 700)")
     p.add_argument("--microphone", type=int, default=None, help="number of the microphone to use")
 
@@ -449,7 +449,7 @@ def main(argv=None):
         from . import voice
 
         try:
-            voice.run(args.board, args.model, args.typed, not args.silent, args.level, args.microphone)
+            voice.run(args.board, args.model, args.typed, args.aloud, args.level, args.microphone)
         except KeyboardInterrupt:
             print()
         except ValueError as e:

@@ -253,19 +253,12 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
           <button class="btn ghost" data-cmd="reset grid" data-confirm="Are the pieces set up by hand on their starting squares? Nothing will move.">Pieces set up by hand</button>
         </div>
         <div class="row">
-          <label class="opt"><input type="checkbox" id="free"> Ignore the rules</label>
-          <label class="opt"><input type="checkbox" id="slow"> Slow moves</label>
           <label class="opt">Promote to
             <select id="promo"><option value="q">queen</option><option value="r">rook</option>
               <option value="b">bishop</option><option value="n">knight</option></select></label>
         </div>
+        <p class="hint" id="voice-line"></p>
       </div>
-      <div class="card" id="voice-box" hidden>
-        <h2>Voice</h2>
-        <div class="seg" id="voice">
-          <button aria-pressed="false" data-voice="on">Listening</button>
-          <button aria-pressed="true" data-voice="off">Muted</button>
-        </div>
         <p class="hint" id="voice-status"></p>
         <div class="heard" id="voice-heard"></div>
         <div class="said" id="voice-said"></div>
@@ -291,6 +284,12 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
         </form>
         <p class="hint">Also: put e4 N · remove e4 · turn black · reset grid · clear · centre 4 · help</p>
       </div>
+      <div class="card" id="voice-box" hidden>
+        <h2>Voice</h2>
+        <div class="seg" id="voice">
+          <button aria-pressed="false" data-voice="on">Listening</button>
+          <button aria-pressed="true" data-voice="off">Muted</button>
+        </div>
     </section>
 
     <section class="tabpage" data-page="sensors" hidden>
@@ -302,7 +301,13 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
 
     <section class="tabpage" data-page="settings" hidden>
       <div class="card">
+        <h2>Rules</h2>
+        <label class="opt"><input type="checkbox" id="free"> Ignore the rules</label>
+        <p class="hint">Any piece can be dragged from any square to any square, with nothing checked.</p>
+      </div>
+      <div class="card">
         <h2>Moving</h2>
+        <label class="opt"><input type="checkbox" id="slow"> Slow moves</label>
         <label class="slider">Centring spiral <b id="centring-text">0 mm</b><input type="range" id="centring" min="0" max="10" step=".5" value="0"></label>
         <p class="hint">How wide the magnet circles at the end of a drag to pull the piece onto its square. 0 is off.</p>
       </div>
@@ -548,6 +553,9 @@ function notice(text, error) {
 let voiceShown = "";
 function showVoice(voice) {
   $("voice-box").hidden = !voice;
+  const latest = voice && voice.on && voice.heard[voice.heard.length - 1];
+  $("voice-line").textContent = !voice || !voice.on ? "" : !latest ? "Listening…"
+    : "Heard \u201c" + latest.text + "\u201d \u00b7 " + (latest.did === "say" ? voice.said : latest.did);
   if (!voice) return;
   for (const button of $("voice").children) button.setAttribute("aria-pressed", (button.dataset.voice === "on") === voice.on);
   $("voice-status").textContent = voice.status === "Off" ? "" : voice.status;

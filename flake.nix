@@ -12,7 +12,8 @@
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
           packages = [
-            (pkgs.python3.withPackages (ps: [ ps.chess ps.pyserial ps.pytest ]))
+            (pkgs.python3.withPackages (ps: [ ps.chess ps.pyserial ps.pytest ps.sounddevice ]))
+            pkgs.whisper-cpp
             pkgs.esptool
             pkgs.mpremote
           ];

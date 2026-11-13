@@ -4,3 +4,4 @@ __pycache__/
 result
 backups/
 esp32/config.json
+models/

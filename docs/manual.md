@@ -3,6 +3,22 @@
 A repurposed laser engraver (Twotrees TTS-55, MKS DLC32 board, GRBL 1.1h) moves an
 electromagnet under the board to drag magnetic chess pieces.
 
+## How the parts fit
+
+```
+phone ──web page──► laptop (rules, routes, voice) ──requests──► ESP32 ──WiFi──► engraver
+```
+
+- **The laptop** runs the game: the chess rules, the route each piece takes, the web
+  page with the board, and voice control.
+- **The ESP32** next to the board is a service. It takes requests to move the head,
+  switch the magnet and play a sound, and passes them to the engraver over WiFi. It also
+  has the speaker and the magnet sensor.
+- **The engraver** moves the magnet.
+
+Two other setups still work and are described under [Other setups](#other-setups): the
+whole game on the ESP32 with only a phone, and the laptop on the engraver's USB cable.
+
 ## Setup
 
 Dependencies come from the Nix flake:
@@ -12,140 +28,56 @@ nix develop          # or `direnv allow` once, if you use direnv
 python -m pytest     # run the tests
 ```
 
-Plug the engraver in over USB. With `"port": "auto"` in `config.json` the tool finds it by
-its USB chip; a named port is used when it exists.
-
-## Running on the ESP32, without a laptop
-
-The ESP32 DevKitC can run the whole game by itself: the rules, the routing and the
-engraver control. It reaches the engraver over WiFi and serves a web page with the
-board; click a piece and then a square to move it.
-
-```
-phone or laptop ──web page──► ESP32 (MicroPython) ──WiFi──► engraver
-```
-
-The ESP32 only needs power from its USB port. It prints the page's address there when
-it starts, and the page can be reached in two ways:
-
-- on the shared WiFi, at the address it prints (also `http://wizardchess.local/`);
-- on the ESP32's own WiFi network (`ap_ssid` and `ap_password` in `esp32/config.json`),
-  at `http://192.168.4.1/`. Use this when the shared network keeps devices from
-  reaching each other, as guest networks do.
-
-Anyone who can open the page can move the pieces.
-
-When it starts, and after **Reconnect**, the page offers to fix risky engraver settings
-and asks whether the head is where the engraver believes it is. Until that is confirmed
-nothing moves. **STOP** halts the engraver at once.
-
 Setting up the ESP32 (inside `nix develop`):
 
 1. Flash MicroPython once (the board has octal flash and PSRAM):
    `esptool --port <port> erase-flash` then
    `esptool --port <port> write-flash 0 ESP32_GENERIC_S3-SPIRAM_OCT-<version>.bin`
    from https://micropython.org/download/ESP32_GENERIC_S3/
-2. Copy `esp32/config.example.json` to `esp32/config.json` and fill in the WiFi and the
-   engraver's address (it is git-ignored).
-3. `./esp32/deploy.sh` copies the program and both config files onto the board and
-   restarts it. Run it again after changing `config.json`, for example after calibrating.
+2. Copy `esp32/config.example.json` to `esp32/config.json` (it is git-ignored). Fill in
+   the WiFi and the engraver's address, and set `"mode": "api"`.
+3. `./esp32/deploy.sh` copies what that mode needs onto the ESP32, removes the rest and
+   restarts it. Run it again after changing either config file.
 
-python-chess is too big for the ESP32, so it uses `esp32/chess.py`, a small version of
-the same rules with the same interface. The tests check the two against each other, and
-`WIZCHESS_RULES=small python -m pytest` runs the whole suite on the small one.
+The ESP32 only needs power from its USB port. It prints its addresses there when it
+starts. It can be reached in two ways:
 
-The engraver takes network commands the way its own web page sends them: each command
-is an HTTP request to `/command` on port 80, and its replies arrive on a WebSocket on
-port 81. The engraver doesn't restart when a session starts this way, so it keeps track
-of the head between sessions.
+- on the shared WiFi, at the address it prints (also `http://wizardchess.local/`);
+- on the ESP32's own WiFi network (`ap_ssid` and `ap_password` in `esp32/config.json`),
+  at `http://192.168.4.1/`. Use this when the shared network keeps devices from
+  reaching each other, as guest networks do.
 
-### Sounds
+On the laptop, `config.json` needs `"link": "chip"` and the ESP32's address under
+`"chip"`. The laptop must be on a network where it can reach that address.
 
-A DFPlayer mini wired to the ESP32 plays a sound for what happens on the board. Its
-pins and volume (0 to 30) are under `sound` in `config.json`; without that entry the
-game is silent. The player's SD card needs a folder `mp3` with files whose names start
-with a four-digit number; the rest of the name is free:
-
-| Number | Sound | Played |
-|---|---|---|
-| 1 | start | when the head's position is confirmed |
-| 2 to 7 | pawn, knight, bishop, rook, queen, king move | as that piece starts to move |
-| 8 | capture | as a capture starts |
-| 9 | invalid_move | when a move is refused |
-| 10 | win | after the checkmate sound |
-| 11 | check | after a move that gives check |
-| 12 | checkmate | after a move that ends the game |
-| 13 | castling | as castling starts |
-| 14 | promotion | after a pawn is promoted |
-| 15 | draw | after a move that ends the game in a draw |
-| 16 | your_turn | after any other move |
-
-The sound for a move starts with the move and cuts off whatever was still playing; the
-sounds for what the move led to wait their turn. macOS adds hidden `._` files when it
-copies onto the card, which the player mistakes for sounds: run `dot_clean -m` on the
-card afterwards.
-
-### The ESP32 as a service, with the game on a laptop
-
-With `"mode": "api"` in `esp32/config.json` the ESP32 runs no game. It takes requests
-from other devices: move the head, switch the magnet, play a sound. The game then runs
-on a laptop, which makes it easy to change, and lets voice, the web page and a chess
-engine live in one place.
-
-```
-phone ──web page──► laptop (rules, routes, voice) ──requests──► ESP32 ──WiFi──► engraver
-```
-
-On the laptop, set `"link": "chip"` and `"chip": "http://192.168.4.1"` (the ESP32's
-address) in `config.json`. Every command then goes through the ESP32:
+## Playing
 
 ```sh
-python -m wizchess web --host 0.0.0.0   # the page, also for phones on the same network
-python -m wizchess voice                # in a second terminal: play by talking
+python -m wizchess web --host 0.0.0.0   # then open http://localhost:8000/
+python -m wizchess --fake web           # practice: nothing really moves
 ```
 
-The laptop must be able to reach the ESP32, so on a guest network it joins the ESP32's
-own WiFi. The grid is kept in `state.json` on the laptop between runs. To go back to the
-game on the ESP32 alone, set `"mode": "game"` and run `./esp32/deploy.sh` again;
-`"link": "usb"` puts the laptop back on the engraver's USB cable.
+Click a piece and then a square to move it. With `--host 0.0.0.0`, phones on the same
+network can open the page at the laptop's address too. Anyone who can open the page can
+move the pieces.
 
-Requests are JSON over HTTP on port 80; `GET /` lists them. Anything that uses the
-engraver is a job: one runs at a time, the request returns the job's number at once,
-and `GET /status` shows the last job that finished (`done`) with its `error` or `result`.
-
-| Request | Body | What it does |
-|---|---|---|
-| `GET /status` | | head position in mm, busy, job, done, error, result, connected, sensor |
-| `POST /connect` | | job: connects to the engraver afresh and reads where the head is |
-| `POST /run` | `{"actions": [["move", 50, 60, 30000], ["magnet", true], ["dwell", 0.3]]}` | job: carries the actions out in order; a move is x and y in mm and a speed in mm/min |
-| `POST /stop` | | halts the engraver at once, magnet off |
-| `POST /settings` | | job: the engraver's settings, as the result |
-| `POST /set` | `{"name": "120", "value": "500"}` | job: changes one engraver setting |
-| `POST /unlock`, `POST /home` | | job: clears an alarm; runs homing |
-| `POST /sound` | `{"name": "capture", "queued": false}` | plays a sound from the table below |
-
-The ESP32 checks every move of a request against the machine's reach before any of them
-starts, and switches the magnet off when a job fails. Anyone on the network can send
-requests; there is no password.
-
-### Magnet sensor
-
-With `"magnet_sensor": {"pin": 4}` in `config.json`, the page shows whether a hall
-sensor (a 3144) on that pin feels a magnet. Seen from its text side with the legs down,
-the sensor's legs go to 3.3 V, ground and the pin. It reacts to one pole only, on its
-text side.
+When it starts, and after **Reconnect**, the page offers to fix risky engraver settings
+and asks whether the head is where the engraver believes it is. Until that is confirmed
+nothing moves. **STOP** halts the engraver at once. The grid is kept in `state.json`
+between runs.
 
 ### Playing by voice
 
 A laptop with a microphone can listen and pass on what is said, so a game runs like a
-conversation. It talks to the board's web page, so it works with the ESP32 and with
-`python -m wizchess web` alike, and the laptop must be able to open that page.
+conversation. Start it in a second terminal, next to the web page's program:
 
 ```sh
-python -m wizchess voice --board http://192.168.4.1   # the ESP32, on its own WiFi
-python -m wizchess voice                               # a board on this laptop, port 8000
-python -m wizchess voice --typed                       # type the sentences, no microphone
+python -m wizchess voice           # talks to the page on this laptop, port 8000
+python -m wizchess voice --typed   # type the sentences, no microphone
 ```
+
+It works through the game's web page, so `--board` can point it at a page anywhere,
+such as an ESP32 in game mode: `--board http://192.168.4.1`.
 
 Speech is recognised on the laptop itself by whisper.cpp, with no internet. It needs a
 model file once, in `models/` (git-ignored):
@@ -179,34 +111,108 @@ the spelling alphabet: alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel.
 `--level` sets how loud speech must be (default 700 of 32767); raise it in a noisy room.
 The STOP button on the page is faster than the word.
 
-### The same page from the laptop
+## The ESP32's requests
 
-```sh
-python -m wizchess web          # then open http://localhost:8000/
-python -m wizchess --fake web   # practice: nothing really moves
+Other devices can use the ESP32's service directly. Requests are JSON over HTTP on port
+80; `GET /` lists them. Anything that uses the engraver is a job: one runs at a time,
+the request returns the job's number at once, and `GET /status` shows the last job that
+finished (`done`) with its `error` or `result`.
+
+| Request | Body | What it does |
+|---|---|---|
+| `GET /status` | | head position in mm, busy, job, done, error, result, connected, sensor |
+| `POST /connect` | | job: connects to the engraver afresh and reads where the head is |
+| `POST /run` | `{"actions": [["move", 50, 60, 30000], ["magnet", true], ["dwell", 0.3]]}` | job: carries the actions out in order; a move is x and y in mm and a speed in mm/min |
+| `POST /stop` | | halts the engraver at once, magnet off |
+| `POST /settings` | | job: the engraver's settings, as the result |
+| `POST /set` | `{"name": "120", "value": "500"}` | job: changes one engraver setting |
+| `POST /unlock`, `POST /home` | | job: clears an alarm; runs homing |
+| `POST /sound` | `{"name": "capture", "queued": false}` | plays a sound from the table below |
+
+The ESP32 checks every move of a request against the machine's reach before any of them
+starts, and switches the magnet off when a job fails. Anyone on the network can send
+requests; there is no password.
+
+The engraver itself takes network commands the way its own web page sends them: each
+command is an HTTP request to `/command` on port 80, and its replies arrive on a
+WebSocket on port 81. It doesn't restart when a session starts this way, so it keeps
+track of the head between sessions. If it was left paused, connecting ends the pause
+and drops the moves that were waiting.
+
+## Sounds
+
+A DFPlayer mini wired to the ESP32 plays a sound for what happens on the board. Its
+pins and volume (0 to 30) are under `sound` in `config.json`; without that entry the
+game is silent. With the game on a laptop, the laptop tells the ESP32 which sound to
+play. The player's SD card needs a folder `mp3` with files whose names start
+with a four-digit number; the rest of the name is free:
+
+| Number | Sound | Played |
+|---|---|---|
+| 1 | start | when the head's position is confirmed |
+| 2 to 7 | pawn, knight, bishop, rook, queen, king move | as that piece starts to move |
+| 8 | capture | as a capture starts |
+| 9 | invalid_move | when a move is refused |
+| 10 | win | after the checkmate sound |
+| 11 | check | after a move that gives check |
+| 12 | checkmate | after a move that ends the game |
+| 13 | castling | as castling starts |
+| 14 | promotion | after a pawn is promoted |
+| 15 | draw | after a move that ends the game in a draw |
+| 16 | your_turn | after any other move |
+
+The sound for a move starts with the move and cuts off whatever was still playing; the
+sounds for what the move led to wait their turn. macOS adds hidden `._` files when it
+copies onto the card, which the player mistakes for sounds: run `dot_clean -m` on the
+card afterwards.
+
+## Magnet sensor
+
+With `"magnet_sensor": {"pin": 4}` in `config.json`, the page shows whether a hall
+sensor (a 3144) on that pin feels a magnet. Seen from its text side with the legs down,
+the sensor's legs go to 3.3 V, ground and the pin. It reacts to one pole only, on its
+text side.
+
+## Other setups
+
+### The whole game on the ESP32
+
+With `"mode": "game"` in `esp32/config.json` (and `./esp32/deploy.sh` run again) the
+ESP32 runs the game itself and serves the web page, so a phone is all it takes:
+
+```
+phone ──web page──► ESP32 (rules, routes) ──WiFi──► engraver
 ```
 
-This runs the game on the laptop, with the engraver on its USB cable.
+Open the ESP32's address in a browser. There is no voice control this way unless a
+laptop runs `voice --board` against that address. The grid is kept on the ESP32.
 
-### The ESP32 as a plain WiFi cable
+python-chess is too big for the ESP32, so game mode uses `esp32/chess.py`, a small
+version of the same rules with the same interface. The tests check the two against each
+other, and `WIZCHESS_RULES=small python -m pytest` runs the whole suite on the small
+one. Everything the game needs must therefore also run under MicroPython.
 
-With `"mode": "bridge"` in `esp32/config.json` and `"link": "wifi"` in `config.json`,
-the terminal commands below run on the laptop and the ESP32 (plugged into the laptop on
-its UART port) only carries their G-code to the engraver over WiFi.
+### The laptop on the engraver's USB cable
+
+With `"link": "usb"` in `config.json` the laptop talks to the engraver directly and no
+ESP32 is needed, but there are no sounds and no sensor. With `"port": "auto"` the tool
+finds the engraver by its USB chip; a named port is used when it exists.
+
+The engraver restarts every time the laptop connects this way, and counts every
+position from wherever the head is at that moment. See [Starting and stopping](#starting-and-stopping).
 
 ## Commands
 
 Add `--fake` before any command to print the G-code instead of moving the engraver.
 
 ```sh
-python -m wizchess info            # engraver info and the settings that matter
 python -m wizchess web             # play from a web page in the browser
 python -m wizchess voice           # play by talking; see Playing by voice
+python -m wizchess info            # engraver info and the settings that matter
 python -m wizchess grid            # interactive grid: type A4 C2, chess rules enforced
 python -m wizchess jog             # interactive: move the head, drag pieces, calibrate
 python -m wizchess outline         # head visits A1, A8, H8, H1 in a circle, one per Enter
 python -m wizchess outline cycle   # pulls a piece from A1 round the corners at 50 mm/s
-python -m wizchess play            # play a game by typing moves (e2e4 or Nf3)
 python -m wizchess goto e4         # head under e4, then back to its corner
 python -m wizchess move e2 e4      # drag a piece, no rules (--edges: travel between squares)
 python -m wizchess home            # $H, once homing switches are installed
@@ -214,17 +220,24 @@ python -m wizchess home            # $H, once homing switches are installed
 
 ## Starting and stopping
 
-The board restarts every time the computer connects, and counts every position from
-wherever the head is at that moment. Every command that moves the head therefore
-starts by asking whether the head is pushed into its corner, and every session ends by
-parking the head there again (`quit`, Ctrl-D or Ctrl-C at a prompt).
+Nothing moves until the head's position is confirmed, because the engraver has no
+switches to find it by itself.
 
-Before that question, the tool offers to fix engraver settings that make pieces slip
-or drop: laser mode (`$32`) and high acceleration (`$120`/`$121`).
+- **Through the ESP32**, the engraver keeps counting between sessions. Each session
+  starts by showing where the engraver believes the head is and asking whether that is
+  right. If it isn't, push the head into its corner and switch the engraver off and on.
+- **On the USB cable**, the engraver restarts with every connection and counts from
+  wherever the head is then. Each session starts by asking whether the head is pushed
+  into its corner.
 
-Ctrl-C while the head is moving halts the engraver at once, including moves it had
-already queued. Its position is lost after that, so push the head back into its corner
-before the next run.
+Terminal sessions end by parking the head in its corner (`quit`, Ctrl-D or Ctrl-C at a
+prompt). Before the position question, the tool offers to fix engraver settings that
+make pieces slip or drop: laser mode (`$32`) and high acceleration (`$120`/`$121`).
+
+STOP on the page, or Ctrl-C in a terminal while the head is moving, halts the engraver
+at once, including moves it had already queued. If the head was still moving at that
+moment its position is lost: push it back into its corner and switch the engraver off
+and on before the next run.
 
 Once homing switches are installed, set `$22=1` on the engraver and
 `"homing_switches": true` in `config.json`; sessions then home instead of asking.
@@ -313,9 +326,8 @@ about a square beyond the board; where it can't, the route stays within what it 
 
 `reset` drags parked pieces back to their starting squares too.
 
-Set `"graveyard": null` to have players lift captured pieces off by hand instead; `play`
-and `grid` then ask before the capturing piece moves in, and typing `cancel` calls the
-move off.
+Set `"graveyard": null` to have players lift captured pieces off by hand instead; the
+game then asks before the capturing piece moves in, and `cancel` calls the move off.
 
 ## Engraver settings
 
@@ -327,20 +339,25 @@ move off.
 
 ## Layout
 
+The last column says which files the ESP32 gets: in both modes, only with the game on
+it, or never.
+
 | Module | Job | On the ESP32 |
 |---|---|---|
-| `geometry.py` | square name ↔ millimetres, from the a1/h1/a8 calibration | yes |
-| `mover.py` | plans head and piece paths: straight when clear, gutters when not | yes |
-| `machine.py` | the engraver as actions (`move_to`, `magnet`, `home`), plus a fake | yes |
-| `protocol.py` | GRBL's conversation: send a line, wait for `ok`, read status, stop | yes |
-| `wifi.py` | carries that conversation over WiFi | yes |
-| `grbl.py` | carries it over USB serial | laptop only |
-| `game.py` | chess rules, captures, castling, en passant | yes, on `esp32/chess.py` |
-| `reset.py` | plans the drags that put every piece back on its starting square | yes |
-| `grid.py`, `session.py` | typed commands and what they do | yes |
-| `web.py`, `page.html` | the web page and the server behind it | yes |
-| `boardapi.py` | the ESP32 as a service: requests to move, switch the magnet, play sounds | yes |
+| `machine.py` | the engraver as actions (`move_to`, `magnet`, `home`), plus a fake | both modes |
+| `protocol.py` | GRBL's conversation: send a line, wait for `ok`, read status, stop | both modes |
+| `wifi.py` | carries that conversation to the engraver over WiFi | both modes |
+| `server.py` | a very small HTTP server | both modes |
+| `boardapi.py` | the ESP32 as a service: requests to move, switch the magnet, play sounds | api mode |
 | `chip.py` | drives the board through that service | laptop only |
+| `grbl.py` | carries GRBL's conversation over USB serial | laptop only |
+| `geometry.py` | square name ↔ millimetres, from the a1/h1/a8 calibration | game mode |
+| `mover.py` | plans piece paths: straight when clear, gutters when not, quiet ways out | game mode |
+| `game.py` | chess rules, captures, castling, en passant | game mode, on `esp32/chess.py` |
+| `reset.py` | plans the drags that put every piece back on its starting square | game mode |
+| `grid.py`, `session.py` | typed commands and what they do | game mode |
+| `sound.py` | which sound belongs to which moment of the game | game mode |
+| `web.py`, `page.html` | the web page and the game loop behind it | game mode |
 | `heard.py` | turns a spoken sentence into a command for the board | laptop only |
 | `voice.py` | microphone, speech recogniser and the spoken replies | laptop only |
 | `cli.py` | command line | laptop only |

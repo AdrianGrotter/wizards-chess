@@ -9,13 +9,15 @@ Built at Wootcamp 2026.
 ## How it works
 
 ```
-phone or laptop ──web page──► ESP32 ──WiFi──► engraver ──► electromagnet under the board
+phone ──web page──► laptop ──requests──► ESP32 ──WiFi──► engraver ──► electromagnet
 ```
 
 - **The engraver** moves the magnet. The laser is replaced by a 12 V electromagnet,
   switched by the laser's own output.
-- **An ESP32** runs the game: the chess rules, the route each piece takes, and the
-  commands to the engraver. It serves a web page with the board.
+- **A laptop** runs the game: the chess rules, the route each piece takes, voice
+  control, and a web page with the board.
+- **An ESP32** by the board takes the laptop's requests to move the magnet and play
+  sounds. It can also run the whole game alone, for play with only a phone.
 - **You** click a piece and a square on that page. The magnet fetches the piece and
   drags it there. Captured pieces are parked beside the board.
 - **Or you talk.** A laptop can listen and pass on moves like "knight to f3".
@@ -30,7 +32,8 @@ Dependencies come from the Nix flake.
 ```sh
 nix develop
 python -m wizchess --fake web     # practice in the browser, nothing really moves
-python -m wizchess web            # the real board, engraver on USB
+python -m wizchess web            # the real board, through the ESP32
+python -m wizchess voice          # play by talking
 python -m pytest                  # tests
 ```
 

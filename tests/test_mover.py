@@ -220,3 +220,61 @@ def test_parked_piece_comes_back_by_a_quiet_route_too():
 def test_slot_off_the_half_square_lattice_uses_the_edge_route():
     path = real_mover().path(Step((3, 4), (3.3, 8), leaves_board=True), START)
     assert path == route_out((3.0, 4.0), (3.3, 8.0))
+
+
+def centring_mover(radius, travel=(300, 320), a1=(34.5, 44.5)):
+    machine = FakeMachine(travel, 1000, echo=False)
+    geometry = Geometry(a1, (a1[0] + 231, a1[1]), (a1[0], a1[1] + 231))
+    return machine, Mover(machine, geometry, 3000, 6000, centring_mm=radius)
+
+
+def moves_of(machine):
+    out = []
+    for line in machine.lines:
+        if line.startswith("G53"):
+            x, y, feed = line.split()[2:]
+            out.append((float(x[1:]), float(y[1:]), int(feed[1:])))
+    return out
+
+
+def test_drag_ends_with_a_spiral_that_closes_on_the_target():
+    machine, mover = centring_mover(4)
+    mover.run(Step((4, 1), (4, 3)))
+    moves = moves_of(machine)
+    target = (166.5, 143.5)
+    assert moves[1] == target + (6000,)
+    spiral = moves[2:]
+    assert len(spiral) == 31 and spiral[-1] == target + (2400,)
+    assert spiral[0] == (166.5, 147.5, 2400)
+    radii = [((x - target[0]) ** 2 + (y - target[1]) ** 2) ** 0.5 for x, y, _ in spiral]
+    assert radii == sorted(radii, reverse=True) and radii[0] == pytest.approx(4)
+    assert machine.lines[-2] == "M5"
+    assert machine.head == target
+
+
+def test_a_trailing_piece_ends_close_to_the_target_whatever_the_friction():
+    for lag in (0, 0.5, 1, 2, 3, 4):
+        machine, mover = centring_mover(4)
+        mover.run(Step((4, 1), (4, 3)))
+        moves = moves_of(machine)
+        px, py = moves[0][:2]
+        for (ax, ay, _), (bx, by, _) in zip(moves, moves[1:]):
+            for i in range(1, 201):
+                mx, my = ax + (bx - ax) * i / 200, ay + (by - ay) * i / 200
+                gap = ((mx - px) ** 2 + (my - py) ** 2) ** 0.5
+                if gap > lag:
+                    px, py = mx - (mx - px) * lag / gap, my - (my - py) * lag / gap
+        missed = ((px - 166.5) ** 2 + (py - 143.5) ** 2) ** 0.5
+        assert missed < 0.7, "a piece trailing by %s mm ends %.2f mm off" % (lag, missed)
+
+
+def test_spiral_stays_within_the_machines_reach():
+    machine, mover = centring_mover(5, a1=(2, 44.5))
+    mover.run(Step((1, 0), (0, 0)))
+    assert min(x for x, _, _ in moves_of(machine)) == 0.0
+
+
+def test_no_spiral_unless_asked_for():
+    machine, mover = centring_mover(0)
+    mover.run(Step((4, 1), (4, 3)))
+    assert len(moves_of(machine)) == 2

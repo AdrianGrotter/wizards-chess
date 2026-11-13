@@ -260,6 +260,23 @@ Add `slow` to a grid move (`B1 C3 slow`) to drag that piece at `slow_feed` from
 `config.json`: 1500 mm/min, which is 25 mm/s. The head still travels to the piece at
 full speed.
 
+## Pieces that stop short
+
+Friction makes a dragged piece trail the magnet, so it stops a little short of the
+square's centre. How much depends on the surface and the piece, and changes over time.
+
+With `centring_mm` in `config.json`, every drag ends with the magnet spiralling inwards
+around the target, three times round, starting that many millimetres out. A trailing
+piece is led round on a circle of its own, which closes to nothing as the magnet's
+circle shrinks, so it ends within about half a millimetre of the centre whether it
+trailed a lot or not at all. Set it a little wider than the worst gap you see; a piece
+that trails by more than `centring_mm` still stops short by the difference. The spiral
+adds about a second to each drag.
+
+To try values, type `centre 4` in the page's text box; it applies from the next drag,
+and `centre 0` switches it off. Put the value in `config.json` to keep it, because a
+typed one is forgotten when the program restarts.
+
 ## Routing
 
 The empty head always goes straight to the piece it is fetching, passing under other

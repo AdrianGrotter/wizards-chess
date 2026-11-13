@@ -16,6 +16,7 @@ GRID_HELP = """\
   reset grid      new game on the grid only, after setting the pieces up by hand
   clear           empty grid (head stays where it is)
   park            head back to its corner, magnet off
+  centre 4        end every drag with a spiral, 4 mm wide at first, that pulls the piece onto its square
   unlock          clear an engraver alarm
   grid            show the grid
   quit            send the head back to its corner and leave
@@ -28,7 +29,9 @@ WORDS = {
     "help": "help", "?": "help", "h": "help",
     "reset": "reset", "clear": "clear", "park": "park", "unlock": "unlock",
     "put": "put", "remove": "remove", "del": "remove", "turn": "turn", "rules": "rules",
+    "centre": "centre", "center": "centre",
 }
+WIDEST_CENTRING_MM = 10
 EXAMPLES = "Type a square (E4), a move (E2 E4), or 'help' for all commands."
 
 _COMPACT_MOVE = re.compile(r"^([a-z]\d+)([a-z]\d+)([a-z])?$")
@@ -65,7 +68,7 @@ def parse_command(text):
 
     ("move", start, end, promotion or None, slow), ("goto", sq, slow), ("put", sq, piece),
     ("remove", sq), ("turn", "white"|"black"), ("rules", "on"|"off"), ("reset", "pieces"|"grid"), ("clear",), ("park",),
-    ("unlock",), ("grid",), ("help",), ("quit",)
+    ("unlock",), ("centre", mm or None), ("grid",), ("help",), ("quit",)
     Squares are returned in lower case; a put piece keeps its case (colour).
     """
     tokens = _tokens(text)
@@ -96,6 +99,19 @@ def parse_command(text):
         if len(tokens) != 2 or tokens[1].lower() not in ("white", "black"):
             raise ValueError("Use turn with white or black, like: turn black")
         return ("turn", tokens[1].lower())
+    if word == "centre":
+        if len(tokens) == 1:
+            return ("centre", None)
+        try:
+            mm = float(tokens[1].replace(",", "."))
+        except ValueError:
+            mm = -1
+        if len(tokens) != 2 or not 0 <= mm <= WIDEST_CENTRING_MM:
+            raise ValueError(
+                "Use centre with a distance from 0 to %d mm, like: centre 4 (0 switches it off)"
+                % WIDEST_CENTRING_MM
+            )
+        return ("centre", mm)
     if word == "remove":
         if len(tokens) != 2:
             raise ValueError("Use remove with one square, like: remove E4")

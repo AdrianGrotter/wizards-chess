@@ -1,4 +1,5 @@
 import heapq
+import math
 
 from .geometry import BOARD_EDGE_HIGH, BOARD_EDGE_LOW, on_board
 
@@ -248,9 +249,27 @@ class Step:
         )
 
 
+# The spiral that centres a piece at the end of a drag: how many times round,
+# how many straight pieces make one round, and how fast in mm/min.
+CENTRING_TURNS = 3
+CENTRING_SIDES = 10
+CENTRING_FEED = 2400
+
+
 class Mover:
-    def __init__(self, machine, geometry, travel_feed, drag_feed, grab_seconds=0.3):
+    def __init__(self, machine, geometry, travel_feed, drag_feed, grab_seconds=0.3, centring_mm=0.0):
+        """centring_mm is the widest gap to expect between a dragged piece and the magnet.
+
+        Friction makes a piece trail the magnet, so it stops short of where
+        the magnet stops, by a distance that changes with the surface and
+        the piece. With centring_mm set, every drag ends with the magnet
+        spiralling inwards from that radius to the target. A trailing piece
+        circles inside the magnet's circle, on a smaller one that closes
+        to nothing once the magnet's radius is down to the gap, so the
+        piece ends on the target whatever the gap was.
+        """
         self.machine = machine
+        self.centring_mm = centring_mm
         self.geometry = geometry
         self.travel_feed = travel_feed
         self.drag_feed = drag_feed
@@ -332,6 +351,24 @@ class Mover:
         self.machine.move_to(0, 0, self.travel_feed)
         self.machine.wait_until_idle()
 
+    def _centring(self, before, target):
+        """The spiral's points in mm, starting out along the way the piece arrived."""
+        if not self.centring_mm:
+            return []
+        ax, ay = self.geometry.to_mm(before)
+        bx, by = self.geometry.to_mm(target)
+        heading = math.atan2(by - ay, bx - ax)
+        reach = self.machine.travel_mm
+        count = CENTRING_TURNS * CENTRING_SIDES
+        points = []
+        for i in range(count):
+            radius = self.centring_mm * (count - i) / count
+            angle = heading + 2 * math.pi * i / CENTRING_SIDES
+            x = bx + radius * math.cos(angle)
+            y = by + radius * math.sin(angle)
+            points.append((min(max(x, 0.0), reach[0]), min(max(y, 0.0), reach[1])))
+        return points + [(bx, by)]
+
     def run(self, step, occupied=None, settle=True):
         """Drag one piece. occupied (grid points of the other pieces) lets routes go straight when clear.
 
@@ -347,6 +384,9 @@ class Mover:
             for point in path[1:]:
                 x, y = self.geometry.to_mm(point)
                 self.machine.move_to(x, y, self.drag_feed)
+            if len(path) > 1:
+                for x, y in self._centring(path[-2], path[-1]):
+                    self.machine.move_to(x, y, min(CENTRING_FEED, self.drag_feed))
         except BaseException:
             try:
                 self.machine.magnet(False)

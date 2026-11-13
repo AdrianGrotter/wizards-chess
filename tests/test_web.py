@@ -277,6 +277,21 @@ class Recorder:
         pass
 
 
+def test_centring_is_switched_on_from_the_page():
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    app = started(machine)
+    wait_for(lambda: not app.busy)
+    play(app, "centre 4")
+    assert "starts 4 mm from the target" in app.state()["log"][-1]["text"]
+    before = len(machine.lines)
+    play(app, "e2 e4")
+    assert sum(line.endswith("F2400") for line in machine.lines[before:]) == 31
+    assert app.state()["head"] == "e4"
+    play(app, "centre 0")
+    assert "no centring spiral" in app.state()["log"][-1]["text"]
+    assert app.submit("centre 50")[0] is False
+
+
 def test_state_shows_the_magnet_sensor():
     felt = [False]
     app = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), magnet_sensor=lambda: felt[0])

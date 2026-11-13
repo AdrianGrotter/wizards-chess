@@ -38,7 +38,10 @@ class App:
         sounds plays the game's sounds (see sound.py); without it the game is silent.
         magnet_sensor() tells whether the board's sensor feels a magnet right now.
         """
-        mover = Mover(machine, Geometry.from_config(cfg["board"]), cfg["travel_feed"], cfg["drag_feed"])
+        mover = Mover(
+            machine, Geometry.from_config(cfg["board"]), cfg["travel_feed"], cfg["drag_feed"],
+            centring_mm=cfg.get("centring_mm", 0.0),
+        )
         graveyard = cfg.get("graveyard")
         game = Game(
             mover,

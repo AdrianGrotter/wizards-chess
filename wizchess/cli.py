@@ -60,7 +60,10 @@ def make_machine(cfg, fake):
 
 
 def make_mover(cfg, machine):
-    return Mover(machine, Geometry.from_config(cfg["board"]), cfg["travel_feed"], cfg["drag_feed"])
+    return Mover(
+        machine, Geometry.from_config(cfg["board"]), cfg["travel_feed"], cfg["drag_feed"],
+        centring_mm=cfg.get("centring_mm", 0.0),
+    )
 
 
 def prepare(cfg, machine):

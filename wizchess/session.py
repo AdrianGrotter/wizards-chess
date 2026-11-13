@@ -55,6 +55,14 @@ class GridSession:
             game.remove(command[1])
         elif kind == "turn":
             game.set_turn(command[1])
+        elif kind == "centre":
+            if command[1] is not None:
+                game.mover.centring_mm = command[1]
+            notes.append(
+                "Every drag ends with a spiral that starts %g mm from the target. To keep this "
+                "after a restart, set centring_mm in config.json." % game.mover.centring_mm
+                if game.mover.centring_mm else "Drags end on the target, with no centring spiral."
+            )
         elif kind == "rules":
             self.rules = command[1] == "on"
             notes.append(

@@ -85,6 +85,49 @@ sounds for what the move led to wait their turn. macOS adds hidden `._` files wh
 copies onto the card, which the player mistakes for sounds: run `dot_clean -m` on the
 card afterwards.
 
+### The ESP32 as a service, with the game on a laptop
+
+With `"mode": "api"` in `esp32/config.json` the ESP32 runs no game. It takes requests
+from other devices: move the head, switch the magnet, play a sound. The game then runs
+on a laptop, which makes it easy to change, and lets voice, the web page and a chess
+engine live in one place.
+
+```
+phone ──web page──► laptop (rules, routes, voice) ──requests──► ESP32 ──WiFi──► engraver
+```
+
+On the laptop, set `"link": "chip"` and `"chip": "http://192.168.4.1"` (the ESP32's
+address) in `config.json`. Every command then goes through the ESP32:
+
+```sh
+python -m wizchess web --host 0.0.0.0   # the page, also for phones on the same network
+python -m wizchess voice                # in a second terminal: play by talking
+```
+
+The laptop must be able to reach the ESP32, so on a guest network it joins the ESP32's
+own WiFi. The grid is kept in `state.json` on the laptop between runs. To go back to the
+game on the ESP32 alone, set `"mode": "game"` and run `./esp32/deploy.sh` again;
+`"link": "usb"` puts the laptop back on the engraver's USB cable.
+
+Requests are JSON over HTTP on port 80; `GET /` lists them. Anything that uses the
+engraver is a job: one runs at a time, the request returns the job's number at once,
+and `GET /status` shows the last job that finished (`done`) with its `error` or `result`.
+
+| Request | Body | What it does |
+|---|---|---|
+| `GET /status` | | head position in mm, busy, job, done, error, result, connected, sensor |
+| `POST /connect` | | job: connects to the engraver afresh and reads where the head is |
+| `POST /run` | `{"actions": [["move", 50, 60, 30000], ["magnet", true], ["dwell", 0.3]]}` | job: carries the actions out in order; a move is x and y in mm and a speed in mm/min |
+| `POST /stop` | | halts the engraver at once, magnet off |
+| `POST /settings` | | job: the engraver's settings, as the result |
+| `POST /set` | `{"name": "120", "value": "500"}` | job: changes one engraver setting |
+| `POST /unlock`, `POST /home` | | job: clears an alarm; runs homing |
+| `POST /sound` | `{"name": "capture", "queued": false}` | plays a sound from the table below |
+
+The ESP32 checks every move of a request against the machine's reach before any of them
+starts, and switches the magnet off when a job fails. Anyone on the network can send
+requests; there is no password.
+
 ### Magnet sensor
 
 With `"magnet_sensor": {"pin": 4}` in `config.json`, the page shows whether a hall
@@ -296,6 +339,8 @@ move off.
 | `reset.py` | plans the drags that put every piece back on its starting square | yes |
 | `grid.py`, `session.py` | typed commands and what they do | yes |
 | `web.py`, `page.html` | the web page and the server behind it | yes |
+| `boardapi.py` | the ESP32 as a service: requests to move, switch the magnet, play sounds | yes |
+| `chip.py` | drives the board through that service | laptop only |
 | `heard.py` | turns a spoken sentence into a command for the board | laptop only |
 | `voice.py` | microphone, speech recogniser and the spoken replies | laptop only |
 | `cli.py` | command line | laptop only |

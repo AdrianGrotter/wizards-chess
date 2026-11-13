@@ -36,8 +36,10 @@ python -m pytest                  # tests
 
 Then open `http://localhost:8000/`.
 
-To put the game on the ESP32, copy `esp32/config.example.json` to `esp32/config.json`,
-fill in the WiFi details and run `./esp32/deploy.sh`.
+To set up the ESP32, copy `esp32/config.example.json` to `esp32/config.json`, fill in
+the WiFi details and run `./esp32/deploy.sh`. Its `mode` decides where the game runs:
+`game` on the ESP32 itself, played from a phone, or `api` on a laptop that sends the
+ESP32 requests.
 
 ## More
 

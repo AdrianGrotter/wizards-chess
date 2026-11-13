@@ -2,7 +2,7 @@ import pytest
 
 from wizchess.geometry import Geometry
 from wizchess.machine import FakeMachine
-from wizchess.mover import Mover, Step, route
+from wizchess.mover import Mover, Step, is_clear, route, route_out
 
 
 def test_direct_route():
@@ -126,8 +126,6 @@ def test_stop_forgets_the_head_position():
 
 
 def test_route_out_runs_along_the_edge_and_steps_straight_into_the_slot():
-    from wizchess.mover import route_out
-
     assert route_out((3, 4), (3.5, 8)) == [(3, 4), (3.5, 4.5), (3.5, 7.5), (3.5, 8)]
     assert route_out((4, 0), (1.0, -1)) == [(4, 0), (3.5, -0.5), (1.0, -0.5), (1.0, -1)]
     assert route_out((0, 6), (7.5, 8)) == [(0, 6), (0.5, 6.5), (0.5, 7.5), (7.5, 7.5), (7.5, 8)]
@@ -161,8 +159,6 @@ def test_slow_drag_leaves_travel_at_full_speed():
 
 
 def test_is_clear_keeps_half_a_square_from_other_pieces():
-    from wizchess.mover import is_clear
-
     assert is_clear([(4, 1), (4, 3)], {(3, 1), (5, 1), (4, 0)})
     assert not is_clear([(4, 1), (4, 3)], {(4, 2)})
     assert not is_clear([(6, 0), (5, 2)], {(6, 1)})
@@ -176,3 +172,51 @@ def test_auto_route_goes_straight_when_clear_and_through_gutters_when_blocked():
     assert mover.path(knight, occupied=set()) == [(6, 0), (5, 2)]
     assert mover.path(knight, occupied={(6, 1)}) == route((6, 0), (5, 2), via_edges=True)
     assert mover.path(knight) == route((6, 0), (5, 2), via_edges=True)
+
+
+START = {(float(f), float(r)) for f in range(8) for r in (0, 1, 6, 7)}
+
+
+def real_mover():
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    return Mover(machine, Geometry((34.5, 44.5), (265.5, 44.5), (34.5, 275.5)), 3000, 1500)
+
+
+def test_first_captured_piece_leaves_round_the_side_past_nothing():
+    others = (START - {(3.0, 6.0), (4.0, 1.0)}) | {(4.0, 3.0)}
+    path = real_mover().path(Step((3, 4), (3.5, 8), leaves_board=True), others)
+    assert path[0] == (3, 4) and path[-1] == (3.5, 8)
+    assert is_clear(path, others, 1.0)
+    assert min(f for f, _ in path) < -0.5 or max(f for f, _ in path) > 7.5
+
+
+def test_captured_piece_goes_round_pieces_already_parked():
+    parked = {(3.5, 8.0), (3.0, 8.0)}
+    others = (START - {(3.0, 6.0)}) | parked
+    path = real_mover().path(Step((0, 4), (4.0, 8), leaves_board=True), others)
+    assert path[-1] == (4.0, 8)
+    assert is_clear(path, others)
+    assert path[-2][0] > 4.0
+
+
+def test_captured_piece_squeezes_through_when_the_machine_has_no_room_beside_the_board():
+    machine = FakeMachine((300, 320), 1000, echo=False)
+    mover = Mover(machine, Geometry((18, 44.5), (282, 44.5), (18, 275.5)), 3000, 1500)
+    others = START - {(3.0, 6.0)}
+    path = mover.path(Step((3, 4), (3.5, 8), leaves_board=True), others)
+    assert path[-1] == (3.5, 8)
+    assert is_clear(path, others)
+    for point in path:
+        machine.check_reach(*mover.geometry.to_mm(point))
+
+
+def test_parked_piece_comes_back_by_a_quiet_route_too():
+    others = START - {(3.0, 6.0)}
+    path = real_mover().path(Step((3.5, 8), (3, 4), leaves_board=True), others)
+    assert path[0] == (3.5, 8) and path[-1] == (3, 4)
+    assert is_clear(path, others, 1.0)
+
+
+def test_slot_off_the_half_square_lattice_uses_the_edge_route():
+    path = real_mover().path(Step((3, 4), (3.3, 8), leaves_board=True), START)
+    assert path == route_out((3.0, 4.0), (3.3, 8.0))

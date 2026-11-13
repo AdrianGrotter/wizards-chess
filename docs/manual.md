@@ -213,9 +213,15 @@ slightly rotated is still hit dead centre.
 The machine reaches about 300 × 324 mm, so there is a spare strip beyond each side's back
 rank. With `graveyard` set in `config.json`, a captured piece is dragged into a row there:
 White's below rank 1, Black's above rank 8, half a square (16.5 mm with 33 mm squares) apart, filling from the
-middle outwards. A row has 17 places, more than the 15 pieces a side can lose. Pieces
-travel along the lines between squares, run along the board's edge, and step straight
-out into their place.
+middle outwards. A row has 17 places, more than the 15 pieces a side can lose.
+
+Pieces pull on each other, so a captured piece takes the way out that passes the fewest
+other pieces, even when that is longer. Early in a game that usually means sideways
+across the empty middle of the board, out past the a- or h-file, round the corner and
+along the row to its place. Later, with pieces spread out and places taken, it picks
+whatever way is quietest then, and squeezes between pieces only when there is no better
+way. The same goes for pieces that `reset` brings back. This needs the machine to reach
+about a square beyond the board; where it can't, the route stays within what it can reach.
 
 `reset` drags parked pieces back to their starting squares too.
 

@@ -51,13 +51,29 @@ for file in ${extra[@]+"${extra[@]}"}; do
   copies+=(+ cp "../wizchess/$file" ":wizchess/$file")
   kept+=", '$file'"
 done
+if [ "$mode" = game ]; then
+  # The page's pictures.
+  mpremote "${connect[@]}" mkdir :wizchess 2>/dev/null || true
+  mpremote "${connect[@]}" mkdir :wizchess/assets 2>/dev/null || true
+  kept+=", 'assets'"
+  for picture in ../wizchess/assets/*; do
+    copies+=(+ cp "$picture" ":wizchess/assets/$(basename "$picture")")
+  done
+fi
 
 mpremote "${connect[@]}" mkdir :wizchess 2>/dev/null || true
 mpremote "${connect[@]}" exec "
 import os
+def clear(path):
+    try:
+        os.remove(path)
+    except OSError:
+        for inner in os.listdir(path):
+            clear(path + '/' + inner)
+        os.rmdir(path)
 for name in os.listdir('wizchess'):
     if name not in ($kept):
-        os.remove('wizchess/' + name)
+        clear('wizchess/' + name)
 for name in os.listdir():
     if name.endswith('.py') and name not in ($keep):
         os.remove(name)

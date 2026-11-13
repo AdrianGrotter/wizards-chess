@@ -85,7 +85,7 @@ def test_page_and_state_are_served():
     wait_for(lambda: not app.busy)
     page = Conn(b"GET / HTTP/1.1\r\nHost: board\r\n\r\n")
     web.handle(page, app)
-    assert page.sent.startswith(b"HTTP/1.0 200 OK") and b"<title>Wizard's chess</title>" in page.sent
+    assert page.sent.startswith(b"HTTP/1.0 200 OK") and b"<title>Wizard's Chess</title>" in page.sent
     state = Conn(b"GET /state HTTP/1.1\r\n\r\n")
     web.handle(state, app)
     assert state.json()["status"] == "White to move"
@@ -290,6 +290,18 @@ def test_centring_is_switched_on_from_the_page():
     play(app, "centre 0")
     assert "no centring spiral" in app.state()["log"][-1]["text"]
     assert app.submit("centre 50")[0] is False
+
+
+def test_page_pictures_are_served_and_nothing_else_from_disk():
+    app = started()
+    def get(path):
+        conn = Conn(("GET %s HTTP/1.1\r\n\r\n" % path).encode())
+        web.handle(conn, app)
+        return conn.sent
+    picture = get("/assets/wax.webp")
+    assert picture.startswith(b"HTTP/1.0 200 OK") and b"image/webp" in picture and b"max-age" in picture
+    for path in ("/assets/../web.py", "/assets/nothing.webp", "/assets/..%2Fweb.py", "/assets/page.html"):
+        assert get(path).startswith(b"HTTP/1.0 404"), path
 
 
 def test_state_shows_the_magnet_sensor():

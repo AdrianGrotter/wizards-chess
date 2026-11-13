@@ -18,6 +18,8 @@ from .server import read_request, respond, serve
 from .session import GridSession
 
 PAGE_PATH = __file__.rsplit("/", 1)[0] + "/page.html"
+ASSETS_PATH = __file__.rsplit("/", 1)[0] + "/assets/"
+ASSET_TYPES = {"jpg": "image/jpeg", "webp": "image/webp", "png": "image/png", "svg": "image/svg+xml"}
 LOG_LENGTH = 40
 SUGGESTED_ACCELERATION = 500
 HIGH_ACCELERATION = 1000
@@ -139,6 +141,7 @@ class App:
             "question": self.question,
             "sensor": None if felt is None else bool(felt),
             "voice": None if self.voice is None else self.voice.state(),
+            "centring": game.mover.centring_mm,
             "log": self.log,
         }
 
@@ -376,6 +379,21 @@ class App:
                 self._carry_out(command)
 
 
+def _send_asset(conn, name):
+    """One of the page's pictures. Only plain file names with a known ending are served."""
+    kind = ASSET_TYPES.get(name.rsplit(".", 1)[-1])
+    plain = all(ch.isalpha() or ch.isdigit() or ch in "-_." for ch in name) and ".." not in name
+    try:
+        if kind is None or not plain:
+            raise OSError
+        with open(ASSETS_PATH + name, "rb") as f:
+            data = f.read()
+    except OSError:
+        respond(conn, b"Not found", "text/plain", "404 Not Found")
+        return
+    respond(conn, data, kind, cache=True)
+
+
 def handle(conn, app):
     request = read_request(conn)
     if request is None:
@@ -384,6 +402,8 @@ def handle(conn, app):
     if method == "GET" and path == "/":
         with open(PAGE_PATH, "rb") as f:
             respond(conn, f.read(), "text/html; charset=utf-8")
+    elif method == "GET" and path.startswith("/assets/"):
+        _send_asset(conn, path[len("/assets/"):])
     elif method == "GET" and path == "/state":
         respond(conn, app.state())
     elif method == "POST" and path == "/command":

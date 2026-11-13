@@ -29,12 +29,14 @@ def read_request(conn):
     return words[0], words[1].split("?")[0], body.decode()
 
 
-def respond(conn, body, content_type="application/json", status="200 OK"):
+def respond(conn, body, content_type="application/json", status="200 OK", cache=False):
+    """Send one reply. With cache, the browser may keep it for a day instead of asking again."""
     if not isinstance(body, bytes):
         body = json.dumps(body).encode()
     conn.sendall(
         ("HTTP/1.0 %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n"
-         "Cache-Control: no-store\r\nConnection: close\r\n\r\n" % (status, content_type, len(body))).encode()
+         "Cache-Control: %s\r\nConnection: close\r\n\r\n"
+         % (status, content_type, len(body), "max-age=86400" if cache else "no-store")).encode()
     )
     conn.sendall(body)
 

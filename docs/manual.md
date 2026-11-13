@@ -57,6 +57,10 @@ python -m wizchess web --host 0.0.0.0   # then open http://localhost:8000/
 python -m wizchess --fake web           # practice: nothing really moves
 ```
 
+The page shows the board on a wooden plank, a sheet with tabs for the game, the controls,
+the sensor and the settings, and a tray with the captured pieces. Its pictures are in
+`wizchess/assets/`, and its fonts come from Google Fonts when the browser has internet.
+
 Click a piece and then a square to move it. With `--host 0.0.0.0`, phones on the same
 network can open the page at the laptop's address too. Anyone who can open the page can
 move the pieces.
@@ -276,9 +280,10 @@ trailed a lot or not at all. Set it a little wider than the worst gap you see; a
 that trails by more than `centring_mm` still stops short by the difference. The spiral
 adds about a second to each drag.
 
-To try values, type `centre 4` in the page's text box; it applies from the next drag,
-and `centre 0` switches it off. Put the value in `config.json` to keep it, because a
-typed one is forgotten when the program restarts.
+To try values, move the slider on the page's Settings tab, or type `centre 4` in its
+text box; it applies from the next drag, and 0 switches it off. Put the value in
+`config.json` to keep it, because one set on the page is forgotten when the program
+restarts.
 
 ## Routing
 

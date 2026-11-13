@@ -9,7 +9,7 @@ GRID_HELP = """\
   A4              move the head under A4, magnet off
   put E4 N        place a piece on the grid (white: KQRBNP, black: kqrbnp)
   remove E4       take a piece off the grid
-  rules off       move any piece anywhere (A1 A8), ignoring the chess rules
+  rules off       drag from any square to any square (A1 A8), nothing checked
   rules on        back to moves that follow the rules
   turn black      set whose turn it is (after fixing the grid by hand)
   reset           new game: drag every piece back to its starting square

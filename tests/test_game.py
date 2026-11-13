@@ -364,18 +364,22 @@ def test_free_move_goes_anywhere_between_the_other_pieces():
     ]
 
 
-def test_free_move_onto_a_piece_parks_it_first():
+def test_free_move_onto_a_piece_replaces_it_on_the_grid_without_parking_it():
     machine = FakeMachine((300, 320), 1000, echo=False)
     graveyard = Graveyard(ROWS)
     game = Game(Mover(machine, Geometry((31, 41), (269, 41), (31, 279)), 3000, 1500), graveyard)
     game.free_move("a1", "a8")
     assert game.board.piece_at(chess.A8).symbol() == "R"
-    assert graveyard.parked["black"] == [((3.5, 8.0), chess.Piece.from_symbol("r"))]
+    assert graveyard.parked["black"] == []
+    assert machine.lines.count("M3 S1000") == 1
 
 
-def test_free_move_from_an_empty_square_is_refused():
-    with pytest.raises(ValueError, match="There is no piece on E4"):
-        new_game().free_move("e4", "e5")
+def test_free_move_from_an_empty_square_still_drags():
+    game = new_game()
+    game.free_move("e4", "e5")
+    lines = game.mover.machine.lines
+    assert "M3 S1000" in lines and "M5" in lines
+    assert game.board.piece_at(chess.E5) is None and game.board.piece_at(chess.E4) is None
 
 
 def drag_lines(machine):

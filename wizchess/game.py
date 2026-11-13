@@ -419,26 +419,28 @@ class Game:
         return notes
 
     def free_move(self, start, end):
-        """Drag a piece anywhere, ignoring the chess rules. Returns notes for the players.
+        """Drag whatever stands on start to end, ignoring the chess rules. Returns notes for the players.
 
-        A piece already on the target square is parked beside the board (or
-        lifted off by hand). The drag goes straight when nothing is in the
-        way and along the gutters between squares otherwise. Whose turn it
-        is stays as it was.
+        Nothing is checked against the grid: the magnet goes to start, switches
+        on and drags to end whether or not the grid shows a piece there, so the
+        board can be tested with pieces placed by hand. The grid only follows
+        along: a piece it shows on start moves to end, replacing any piece it
+        showed there. The drag goes straight unless the grid shows a piece in
+        the way. Whose turn it is stays as it was.
         """
         from_square, to_square = chess.parse_square(start), chess.parse_square(end)
-        piece = self.board.piece_at(from_square)
-        if piece is None:
-            raise ValueError("There is no piece on %s." % start.upper())
-        captured = to_square if self.board.piece_at(to_square) else None
-        steps = []
-        if captured is not None and self.graveyard is not None:
-            slot = self.graveyard.peek_slot(_color_name(self.board.color_at(captured)))
-            steps.append(Step(grid(captured), slot, leaves_board=True))
-        steps.append(Step(grid(from_square), grid(to_square), via_edges=None))
-        self._carry_out(from_square, to_square, steps, captured)
-        self.board.remove_piece_at(to_square)
-        self.board.set_piece_at(to_square, self.board.remove_piece_at(from_square))
+        step = Step(grid(from_square), grid(to_square), via_edges=None)
+        self.mover.check(step)
+        try:
+            self.mover.run(step, self.occupied() - {step.end})
+        except Exception as e:
+            raise MoveInterrupted(
+                "The drag from %s to %s stopped partway: %s\nThe grid was not changed."
+                % (start.upper(), end.upper(), e)
+            )
+        piece = self.board.remove_piece_at(from_square)
+        if piece is not None:
+            self.board.set_piece_at(to_square, piece)
         self._tidy()
         return []
 

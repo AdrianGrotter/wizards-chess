@@ -140,11 +140,16 @@ diagonally onto its target.
 
 ## Moving without rules
 
-`rules off` in the grid lets any piece go to any square (`A1 A8`), for testing and for
-fixing up the board. A piece on the target square is parked beside the board first (or
-lifted off by hand without a graveyard), the drag follows the usual routing rule below,
-and whose turn it is stays unchanged. `rules on` switches the rules back on and points out
-anything about the position that a real game couldn't reach.
+`rules off` is for testing the board. A move like `A1 A8` then does exactly what it says:
+the magnet goes to A1, switches on and drags to A8. Nothing is checked against the grid,
+so it works with pieces placed by hand, and from squares the grid shows as empty. The
+grid only follows along: a piece it shows on the start square moves to the target and
+replaces whatever it showed there. Nothing is parked beside the board. The drag still
+goes straight unless the grid shows a piece in the way.
+
+The head must still have a confirmed position, and moves outside the machine's reach
+are still refused. `rules on` switches the rules back on and points out anything about
+the position that a real game couldn't reach.
 
 ## Resetting the board
 

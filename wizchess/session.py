@@ -55,7 +55,7 @@ class GridSession:
             self.rules = command[1] == "on"
             notes.append(
                 "Moves follow the chess rules again." if self.rules
-                else "Rules are off: any piece can go to any square. Type 'rules on' to go back."
+                else "Rules are off: every move is dragged as asked, with nothing checked. Type 'rules on' to go back."
             )
             if self.rules:
                 notes.extend("Note: %s." % p for p in game.problems())

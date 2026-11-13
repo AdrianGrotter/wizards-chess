@@ -534,18 +534,18 @@ function clicked(name) {
     notice("Wait for the board to finish its move.", true);
     return;
   }
-  if (selected !== null && !state.pieces[selected]) selected = null;
+  if (selected !== null && state.rules && !state.pieces[selected]) selected = null;
   if (selected === null) {
-    if (state.pieces[name]) { selected = name; sound.click(); }
+    if (state.pieces[name] || !state.rules) { selected = name; sound.click(); }
   } else if (selected === name) {
     selected = null;
   } else {
     const piece = state.pieces[selected];
     let text = selected + " " + name;
-    if (state.rules && piece.toLowerCase() === "p" && (name[1] === "8" || name[1] === "1")) text += " " + $("promo").value;
+    if (state.rules && piece && piece.toLowerCase() === "p" && (name[1] === "8" || name[1] === "1")) text += " " + $("promo").value;
     if ($("slow").checked) text += " slow";
     const legal = !state.rules || ((state.moves || {})[selected] || []).includes(name);
-    if (legal) {
+    if (legal && piece) {
       optimistic = {from: selected, to: name, piece, at: Date.now()};
       previous = JSON.parse(JSON.stringify(state));
       overlay();

@@ -85,6 +85,13 @@ sounds for what the move led to wait their turn. macOS adds hidden `._` files wh
 copies onto the card, which the player mistakes for sounds: run `dot_clean -m` on the
 card afterwards.
 
+### Magnet sensor
+
+With `"magnet_sensor": {"pin": 4}` in `config.json`, the page shows whether a hall
+sensor (a 3144) on that pin feels a magnet. Seen from its text side with the legs down,
+the sensor's legs go to 3.3 V, ground and the pin. It reacts to one pole only, on its
+text side.
+
 ### The same page from the laptop
 
 ```sh

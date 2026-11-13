@@ -71,7 +71,13 @@ def play(config, ip):
 
         wiring = game["sound"]
         sounds = Player(wiring["tx"], wiring["rx"], wiring["busy"], wiring.get("volume", 20))
-    web.run(game, machine, 80, state_path="state.json", sounds=sounds)
+    magnet_sensor = None
+    if game.get("magnet_sensor"):
+        from machine import Pin
+
+        pin = Pin(game["magnet_sensor"]["pin"], Pin.IN, Pin.PULL_UP)
+        magnet_sensor = lambda: pin.value() == 0
+    web.run(game, machine, 80, state_path="state.json", sounds=sounds, magnet_sensor=magnet_sensor)
 
 
 def main():

@@ -32,10 +32,11 @@ class App:
     server's thread only hands them over, reads the state and asks for a stop.
     """
 
-    def __init__(self, cfg, machine, state_path=None, sounds=None):
+    def __init__(self, cfg, machine, state_path=None, sounds=None, magnet_sensor=None):
         """state_path names a file that keeps the grid across restarts of this program.
 
         sounds plays the game's sounds (see sound.py); without it the game is silent.
+        magnet_sensor() tells whether the board's sensor feels a magnet right now.
         """
         mover = Mover(machine, Geometry.from_config(cfg["board"]), cfg["travel_feed"], cfg["drag_feed"])
         graveyard = cfg.get("graveyard")
@@ -48,6 +49,7 @@ class App:
         self.machine = machine
         self.session = GridSession(game, cfg.get("slow_feed", 1500), self.ask, sounds)
         self.sounds = self.session.sounds
+        self.magnet_sensor = magnet_sensor
         self.lock = _thread.allocate_lock()
         self.pending = None
         self.busy = True
@@ -130,6 +132,7 @@ class App:
             "busy": self.busy,
             "ready": self.ready,
             "question": self.question,
+            "sensor": None if self.magnet_sensor is None else bool(self.magnet_sensor()),
             "log": self.log,
         }
 
@@ -444,8 +447,8 @@ def serve(app, port, host="0.0.0.0"):
             conn.close()
 
 
-def run(cfg, machine, port, host="0.0.0.0", state_path=None, sounds=None):
+def run(cfg, machine, port, host="0.0.0.0", state_path=None, sounds=None, magnet_sensor=None):
     """Serve the page and play until the program is ended."""
-    app = App(cfg, machine, state_path, sounds)
+    app = App(cfg, machine, state_path, sounds, magnet_sensor)
     _thread.start_new_thread(serve, (app, port, host))
     app.run()

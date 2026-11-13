@@ -125,6 +125,11 @@
   .small { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
   #last { min-height: 1.5em; font-size: 15px; color: var(--muted); white-space: pre-wrap; }
   #last.error { color: #ff9a92; }
+  #sensor { display: none; color: var(--muted); }
+  #sensor.shown { display: inline-flex; gap: 8px; align-items: center; }
+  #sensor i { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--muted); }
+  #sensor.on { color: var(--gold); }
+  #sensor.on i { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 12px var(--gold); }
   #question { display: none; max-width: 640px; margin: 0 auto 18px; text-align: center; border-color: var(--gold); animation: summon .35s ease-out, glow 2s ease-in-out infinite; }
   #question.on { display: block; }
   @keyframes summon { from { transform: scale(.92); opacity: 0; } }
@@ -198,6 +203,7 @@
           <label><input type="checkbox" id="free"> Ignore the rules</label>
           <label><input type="checkbox" id="sound" checked> Sound</label>
         </div>
+        <div class="row"><span id="sensor"><i></i><span id="sensor-text"></span></span></div>
         <div class="row">
           <label>Promote to
             <select id="promo"><option value="q">queen</option><option value="r">rook</option>
@@ -279,6 +285,8 @@ function draw() {
   $("frame").classList.toggle("busy", state.busy);
   $("stop").classList.toggle("live", state.busy);
   $("free").checked = !state.rules;
+  $("sensor").className = state.sensor == null ? "" : state.sensor ? "shown on" : "shown";
+  $("sensor-text").textContent = state.sensor ? "Sensor: magnet" : "Sensor: no magnet";
   for (const color of ["white", "black"]) {
     const row = $("cap-" + color);
     row.replaceChildren();

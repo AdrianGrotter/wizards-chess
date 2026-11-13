@@ -35,5 +35,8 @@
     "rx": 13,
     "busy": 14,
     "volume": 20
+  },
+  "magnet_sensor": {
+    "pin": 4
   }
 }

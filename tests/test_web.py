@@ -277,6 +277,15 @@ class Recorder:
         pass
 
 
+def test_state_shows_the_magnet_sensor():
+    felt = [False]
+    app = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), magnet_sensor=lambda: felt[0])
+    assert app.state()["sensor"] is False
+    felt[0] = True
+    assert app.state()["sensor"] is True
+    assert web.App(CFG, FakeMachine((300, 320), 1000, echo=False)).state()["sensor"] is None
+
+
 def test_sounds_follow_the_game():
     sounds = Recorder()
     app = web.App(CFG, FakeMachine((300, 320), 1000, echo=False), sounds=sounds)

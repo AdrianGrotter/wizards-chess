@@ -550,7 +550,7 @@ function showVoice(voice) {
   $("voice-box").hidden = !voice;
   if (!voice) return;
   for (const button of $("voice").children) button.setAttribute("aria-pressed", (button.dataset.voice === "on") === voice.on);
-  $("voice-status").textContent = voice.status;
+  $("voice-status").textContent = voice.status === "Off" ? "" : voice.status;
   $("voice-said").textContent = voice.on && voice.said ? "\u201c" + voice.said + "\u201d" : "";
   const key = voice.heard.map(h => h.n).join(",");
   if (key === voiceShown) return;

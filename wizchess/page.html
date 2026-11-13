@@ -136,7 +136,7 @@ body { background-color: #1c110a;
 .moves span:nth-child(3n+1) { color: #8b5a3c; font-style: italic; }
 .sensors { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
 .sensors span { aspect-ratio: 1; border-radius: 50%; border: 1px solid #6b4a3366; } .sensors span.on { background: radial-gradient(circle at 40% 35%, #7a2a24, #3d1010); border-color: #3d1010; }
-.log { color: #6b4a33; font: italic 14px/1.6 "IM Fell English", serif; max-height: 110px; overflow: auto; } .log b { color: #5a1e1e; font-style: normal; font-weight: 400; }
+.log { color: #6b4a33; font: italic 14px/1.6 "IM Fell English", serif; max-height: 300px; overflow: auto; } .log b { color: #5a1e1e; font-style: normal; font-weight: 400; }
 .cmd { display: flex; gap: 6px; }
 .cmd input { flex: 1; min-width: 0; padding: 6px 2px; font: italic 17px "IM Fell English", serif; background: transparent; border: 0; border-bottom: 1px solid #2a1a10; color: #2a1a10; }
 .slider { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 14px; color: #6b4a33; }
@@ -253,11 +253,6 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
           <button class="btn" data-cmd="reset" data-confirm="Drag every piece back to its starting square?">New game</button>
           <button class="btn ghost" data-cmd="reset grid" data-confirm="Are the pieces set up by hand on their starting squares? Nothing will move.">Pieces set up by hand</button>
         </div>
-        <div class="row">
-          <label class="opt">Promote to
-            <select id="promo"><option value="q">queen</option><option value="r">rook</option>
-              <option value="b">bishop</option><option value="n">knight</option></select></label>
-        </div>
         <p class="hint" id="voice-line"></p>
       </div>
     </section>
@@ -305,6 +300,9 @@ select { font: 15px "IM Fell English", serif; background: transparent; color: #2
         <h2>Rules</h2>
         <label class="opt"><input type="checkbox" id="free"> Ignore the rules</label>
         <p class="hint">Any piece can be dragged from any square to any square, with nothing checked.</p>
+        <label class="opt">A pawn reaching the far side becomes a
+          <select id="promo"><option value="q">queen</option><option value="r">rook</option>
+            <option value="b">bishop</option><option value="n">knight</option></select></label>
       </div>
       <div class="card">
         <h2>Moving</h2>

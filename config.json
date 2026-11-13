@@ -12,7 +12,7 @@
   "travel_feed": 30000,
   "drag_feed": 6000,
   "slow_feed": 1500,
-  "centring_mm": 4,
+  "centring_mm": 0,
   "board": {
     "a1": [
       34.5,

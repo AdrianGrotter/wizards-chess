@@ -426,7 +426,26 @@ def main(argv=None):
         help="address to listen on; 0.0.0.0 lets other devices on the network use the page",
     )
 
+    p = sub.add_parser("voice", help="play by talking: listens on the microphone and talks to the board's web page")
+    p.add_argument("--board", default="http://localhost:8000", help="address of the board's web page")
+    p.add_argument("--model", default="models/ggml-small.en.bin", help="whisper.cpp model file")
+    p.add_argument("--typed", action="store_true", help="type the sentences instead of speaking them")
+    p.add_argument("--silent", action="store_true", help="print the board's replies without saying them aloud")
+    p.add_argument("--level", type=int, default=700, help="how loud speech must be, 0 to 32767 (default 700)")
+    p.add_argument("--microphone", type=int, default=None, help="number of the microphone to use")
+
     args = parser.parse_args(argv)
+    if args.command == "voice":
+        from . import voice
+
+        try:
+            voice.run(args.board, args.model, args.typed, not args.silent, args.level, args.microphone)
+        except KeyboardInterrupt:
+            print()
+        except ValueError as e:
+            print(e)
+            return 1
+        return 0
     cfg = config_file.load()
     try:
         machine = make_machine(cfg, args.fake)

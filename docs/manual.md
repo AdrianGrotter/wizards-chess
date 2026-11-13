@@ -92,6 +92,50 @@ sensor (a 3144) on that pin feels a magnet. Seen from its text side with the leg
 the sensor's legs go to 3.3 V, ground and the pin. It reacts to one pole only, on its
 text side.
 
+### Playing by voice
+
+A laptop with a microphone can listen and pass on what is said, so a game runs like a
+conversation. It talks to the board's web page, so it works with the ESP32 and with
+`python -m wizchess web` alike, and the laptop must be able to open that page.
+
+```sh
+python -m wizchess voice --board http://192.168.4.1   # the ESP32, on its own WiFi
+python -m wizchess voice                               # a board on this laptop, port 8000
+python -m wizchess voice --typed                       # type the sentences, no microphone
+```
+
+Speech is recognised on the laptop itself by whisper.cpp, with no internet. It needs a
+model file once, in `models/` (git-ignored):
+
+```sh
+mkdir -p models && curl -L -o models/ggml-small.en.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
+```
+
+What it understands:
+
+| Say | What happens |
+|---|---|
+| "knight to f3", "pawn takes d5", "e4" | that move, when exactly one piece can make it |
+| "e2 e4", "alpha two alpha four" | from one square to another; with rules off this is the only form |
+| "bishop takes knight" | the capture, named by pieces |
+| "castle", "castle queenside" | castling |
+| "pawn takes a8, promote to knight" | promotion; a queen unless you say otherwise |
+| "yes", "no" | answers the board's question, which it reads aloud |
+| "new game" | asks for a yes first |
+| "stop" | halts the engraver, about a second after the word |
+
+It listens all the time, so a sentence only counts when every word in it is chess talk;
+anything else is taken for chatter. It says each move back as the move starts, asks
+which piece when two could make the move ("Which knight: the one on B1 or F3?"), and
+reads the board's refusals and "check" aloud. The terminal shows every sentence it
+heard and what it did with it.
+
+Letters like B, D and E sound alike. When it mishears a square, name both squares or use
+the spelling alphabet: alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel.
+`--level` sets how loud speech must be (default 700 of 32767); raise it in a noisy room.
+The STOP button on the page is faster than the word.
+
 ### The same page from the laptop
 
 ```sh
@@ -114,6 +158,7 @@ Add `--fake` before any command to print the G-code instead of moving the engrav
 ```sh
 python -m wizchess info            # engraver info and the settings that matter
 python -m wizchess web             # play from a web page in the browser
+python -m wizchess voice           # play by talking; see Playing by voice
 python -m wizchess grid            # interactive grid: type A4 C2, chess rules enforced
 python -m wizchess jog             # interactive: move the head, drag pieces, calibrate
 python -m wizchess outline         # head visits A1, A8, H8, H1 in a circle, one per Enter
@@ -251,6 +296,8 @@ move off.
 | `reset.py` | plans the drags that put every piece back on its starting square | yes |
 | `grid.py`, `session.py` | typed commands and what they do | yes |
 | `web.py`, `page.html` | the web page and the server behind it | yes |
+| `heard.py` | turns a spoken sentence into a command for the board | laptop only |
+| `voice.py` | microphone, speech recogniser and the spoken replies | laptop only |
 | `cli.py` | command line | laptop only |
 
 Positions are sent as machine coordinates (`G53`), so offsets that other software

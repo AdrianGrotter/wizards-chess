@@ -18,6 +18,7 @@ phone or laptop ──web page──► ESP32 ──WiFi──► engraver ─�
   commands to the engraver. It serves a web page with the board.
 - **You** click a piece and a square on that page. The magnet fetches the piece and
   drags it there. Captured pieces are parked beside the board.
+- **Or you talk.** A laptop can listen and pass on moves like "knight to f3".
 
 Pieces go straight when the way is clear and along the lines between squares when
 another piece is in the way.

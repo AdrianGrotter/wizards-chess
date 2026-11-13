@@ -1,5 +1,6 @@
 {
-  "link": "usb",
+  "link": "chip",
+  "chip": "http://192.168.4.1",
   "port": "auto",
   "baud": 115200,
   "travel_mm": [
